@@ -65,7 +65,7 @@ export function HomePage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
           {/* Card 1: Lab Partikel */}
           <Link
-            to="/lab/partikel"
+            to="/laboratorium/partikel"
             className="flex flex-col justify-between p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] transition-all group"
           >
             <div>
@@ -87,7 +87,7 @@ export function HomePage() {
 
           {/* Card 2: Kalkulator Partikel */}
           <Link
-            to="/lab/kalkulator"
+            to="/laboratorium/kalkulator"
             className="flex flex-col justify-between p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] transition-all group"
           >
             <div>
@@ -109,7 +109,7 @@ export function HomePage() {
 
           {/* Card 3: Simulator Ion */}
           <Link
-            to="/lab/ion"
+            to="/laboratorium/ion"
             className="flex flex-col justify-between p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] transition-all group"
           >
             <div>

@@ -44,7 +44,7 @@ export function HomeHero() {
             </Link>
 
             <Link
-              to="/lab/partikel"
+              to="/laboratorium/partikel"
               className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-[#FFF8F0] hover:bg-[#FFEDD5] text-[#C2410C] font-semibold text-base border border-[#F1E5D8] transition-colors min-h-[44px]"
             >
               <Atom className="w-5 h-5 text-[#F97316]" aria-hidden="true" />
