@@ -43,3 +43,9 @@ npm run preview
 - `public/` — Berisi aset statis (favicon, icons, dll)
 - `vite.config.ts` — Konfigurasi Vite & Tailwind CSS plugin
 - `tsconfig.json` — Konfigurasi TypeScript
+
+## Kegiatan Kelas
+
+Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Tahapan progres, pertanyaan polling, bank soal, daftar nama guru, dan PIN dapat diedit pada `src/lib/classroom.ts`.
+
+Data kelas disimpan di `localStorage` browser. Artinya data bertahan di browser/perangkat yang sama, tetapi belum terkumpul lintas perangkat siswa; fitur polling memerlukan backend bersama untuk distribusi kelas lintas perangkat. Gerbang PIN di sisi klien adalah penghalang kasual, bukan kontrol akses yang aman untuk data sensitif. Ganti konstanta `TEACHER_PIN` sebelum publikasi.
