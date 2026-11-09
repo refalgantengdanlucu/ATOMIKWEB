@@ -15,6 +15,7 @@ import {
   X,
 } from 'lucide-react';
 import { useProgress, isSectionUnlocked, isTopicUnlocked } from '../lib/progress';
+import { useAccess } from '../lib/access-context';
 import type { TopicId } from '../types';
 
 export function MateriDetailPage() {
@@ -23,6 +24,7 @@ export function MateriDetailPage() {
   const navigate = useNavigate();
 
   const { progress, markAsRead } = useProgress();
+  const { profile } = useAccess();
   const visited = progress.visitedSectionIds;
 
   // Mobile sidebar toggle
@@ -33,74 +35,23 @@ export function MateriDetailPage() {
     (a, b) => a.order - b.order
   );
 
-  // --- Guard: topik tidak ditemukan ---
-  if (!topic || topicSections.length === 0) {
-    return (
-      <div className="py-16 text-center max-w-lg mx-auto">
-        <div className="w-12 h-12 rounded-full bg-red-100 text-[#B91C1C] flex items-center justify-center mx-auto mb-4">
-          <AlertCircle className="w-6 h-6" aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-bold text-[#172033]">Topik Tidak Ditemukan</h1>
-        <p className="mt-2 text-sm text-[#475569]">
-          Topik materi dengan ID "{topicId}" tidak tersedia dalam kurikulum ATOMIKA.
-        </p>
-        <Link
-          to="/materi"
-          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          <span>Kembali ke Daftar Materi</span>
-        </Link>
-      </div>
-    );
-  }
-
-  // --- Guard: topik terkunci ---
-  const topicUnlocked = isTopicUnlocked(topicId as TopicId, visited);
-  if (!topicUnlocked) {
-    const topicIndex = TOPICS.findIndex((t) => t.id === topicId);
-    const prerequisiteTopics = TOPICS.slice(0, topicIndex).map((t) => t.title);
-    return (
-      <div className="py-16 text-center max-w-lg mx-auto">
-        <div className="w-16 h-16 rounded-full bg-[#FFEDD5] text-[#C2410C] flex items-center justify-center mx-auto mb-4">
-          <Lock className="w-8 h-8" aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-bold text-[#172033]">Topik Masih Terkunci</h1>
-        <p className="mt-3 text-sm text-[#475569] leading-relaxed max-w-sm mx-auto">
-          Selesaikan semua bagian materi dari topik berikut terlebih dahulu:
-        </p>
-        <ul className="mt-3 space-y-1.5">
-          {prerequisiteTopics.map((title) => (
-            <li
-              key={title}
-              className="text-sm font-semibold text-[#C2410C] bg-[#FFEDD5] px-4 py-2 rounded-xl"
-            >
-              {title}
-            </li>
-          ))}
-        </ul>
-        <Link
-          to="/materi"
-          className="mt-8 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm"
-        >
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          <span>Kembali ke Daftar Topik</span>
-        </Link>
-      </div>
-    );
-  }
+  const isTeacher = profile?.role === 'teacher';
+  const topicUnlocked =
+    isTeacher ||
+    (topicId === 't1' && isTopicUnlocked(topicId as TopicId, visited));
 
   // --- Tentukan bagian aktif ---
   const requestedSectionId = searchParams.get('s');
-  const firstUnlockedSection = topicSections.find((s) =>
-    isSectionUnlocked(topicId as TopicId, s.id, visited)
-  );
+  const firstUnlockedSection = isTeacher
+    ? topicSections[0]
+    : topicSections.find((s) => isSectionUnlocked(topicId as TopicId, s.id, visited));
 
   // Jika bagian yang diminta masih terkunci, fallback ke bagian pertama yang terbuka
   const requestedSection = topicSections.find((s) => s.id === requestedSectionId);
-  const canAccessRequested =
+  const canAccessRequested = Boolean(
     requestedSection &&
-    isSectionUnlocked(topicId as TopicId, requestedSection.id, visited);
+    (isTeacher || isSectionUnlocked(topicId as TopicId, requestedSection.id, visited))
+  );
 
   const activeSection = canAccessRequested
     ? requestedSection
@@ -120,29 +71,64 @@ export function MateriDetailPage() {
       prevActiveSectionIdRef.current = activeSection.id;
       markAsRead(activeSection.id);
     }
-  }, [activeSection?.id, markAsRead]);
+  }, [activeSection, markAsRead]);
 
-  // Tutup sidebar saat bagian berubah di mobile
-  useEffect(() => {
-    setSidebarOpen(false);
-  }, [activeSection?.id]);
+  if (!topic || topicSections.length === 0) {
+    return (
+      <div className="py-16 text-center max-w-lg mx-auto">
+        <div className="w-12 h-12 rounded-full bg-red-100 text-[#B91C1C] flex items-center justify-center mx-auto mb-4">
+          <AlertCircle className="w-6 h-6" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-[#172033]">Topik Tidak Ditemukan</h1>
+        <p className="mt-2 text-sm text-[#475569]">
+          Topik materi dengan ID "{topicId}" tidak tersedia dalam kurikulum ATOMIKA.
+        </p>
+        <Link to="/materi" className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          <span>Kembali ke Daftar Materi</span>
+        </Link>
+      </div>
+    );
+  }
+
+  if (!topicUnlocked) {
+    return (
+      <div className="py-16 text-center max-w-lg mx-auto">
+        <div className="w-16 h-16 rounded-full bg-[#FFEDD5] text-[#C2410C] flex items-center justify-center mx-auto mb-4">
+          <Lock className="w-8 h-8" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-[#172033]">Topik Masih Terkunci</h1>
+        <p className="mt-3 text-sm text-[#475569] leading-relaxed max-w-sm mx-auto">
+          Topik ini terkunci untuk akses siswa. Minta guru membuka akses melalui Dashboard Guru.
+        </p>
+        <Link to="/materi" className="mt-8 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm">
+          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
+          <span>Kembali ke Daftar Topik</span>
+        </Link>
+      </div>
+    );
+  }
 
   const handleSectionClick = (sectionId: string) => {
-    const unlocked = isSectionUnlocked(topicId as TopicId, sectionId, visited);
+    const unlocked =
+      isTeacher || isSectionUnlocked(topicId as TopicId, sectionId, visited);
     if (unlocked) {
       setSearchParams({ s: sectionId });
+      setSidebarOpen(false);
     }
   };
 
   const handleNextSection = () => {
     if (nextSection) {
       setSearchParams({ s: nextSection.id });
+      setSidebarOpen(false);
     }
   };
 
   const handlePrevSection = () => {
     if (prevSection) {
       setSearchParams({ s: prevSection.id });
+      setSidebarOpen(false);
     }
   };
 
@@ -356,6 +342,7 @@ export function MateriDetailPage() {
                 activeSection={activeSection}
                 topicId={topicId as TopicId}
                 visited={visited}
+                isTeacher={isTeacher}
                 onSelect={handleSectionClick}
                 isSectionRead={isSectionRead}
               />
@@ -400,6 +387,7 @@ export function MateriDetailPage() {
               activeSection={activeSection}
               topicId={topicId as TopicId}
               visited={visited}
+              isTeacher={isTeacher}
               onSelect={handleSectionClick}
               isSectionRead={isSectionRead}
             />
@@ -489,6 +477,7 @@ interface SectionNavListProps {
   activeSection: { id: string } | null | undefined;
   topicId: TopicId;
   visited: string[];
+  isTeacher: boolean;
   onSelect: (id: string) => void;
   isSectionRead: (id: string) => boolean;
 }
@@ -498,6 +487,7 @@ function SectionNavList({
   activeSection,
   topicId,
   visited,
+  isTeacher,
   onSelect,
   isSectionRead,
 }: SectionNavListProps) {
@@ -505,7 +495,7 @@ function SectionNavList({
     <>
       {sections.map((sec, index) => {
         const isSelected = activeSection?.id === sec.id;
-        const unlocked = isSectionUnlocked(topicId, sec.id, visited);
+        const unlocked = isTeacher || isSectionUnlocked(topicId, sec.id, visited);
         const read = isSectionRead(sec.id);
 
         return (

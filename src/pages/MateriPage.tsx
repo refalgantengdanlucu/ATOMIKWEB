@@ -5,12 +5,20 @@ import { SECTIONS } from '../data/sections';
 import { TopicCard } from '../components/TopicCard';
 import { Search, BookOpen, X, ArrowRight, Sparkles } from 'lucide-react';
 import { useProgress } from '../lib/progress';
+import { useAccess } from '../lib/access-context';
 import type { TopicId, TopicStatus } from '../types';
 
 export function MateriPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const { progress, isTopicUnlocked, isSectionUnlocked, getTopicCompletion } = useProgress();
+  const { profile } = useAccess();
   const visited = progress.visitedSectionIds;
+  const canOpenTopic = (topicId: TopicId) =>
+    profile?.role === 'teacher' ||
+    (topicId === 't1' && isTopicUnlocked(topicId));
+  const canOpenSection = (topicId: TopicId, sectionId: string) =>
+    profile?.role === 'teacher' ||
+    (topicId === 't1' && isSectionUnlocked(topicId, sectionId));
 
   // Algoritma pencarian berbobot sisi klien (PRD Bagian 7.1)
   const searchResults = useMemo(() => {
@@ -133,7 +141,7 @@ export function MateriPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {searchResults.map((sec) => {
                 const parentTopic = TOPICS.find((t) => t.id === sec.topicId);
-                const sectionUnlocked = isSectionUnlocked(sec.topicId as TopicId, sec.id);
+                const sectionUnlocked = canOpenSection(sec.topicId as TopicId, sec.id);
                 return (
                   <div key={sec.id} className="relative">
                     {sectionUnlocked ? (
@@ -191,9 +199,13 @@ export function MateriPage() {
         /* Tiga Kartu Topik Utama dengan status kunci */
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {TOPICS.map((topic) => {
-            const unlocked = isTopicUnlocked(topic.id as TopicId);
+            const unlocked = canOpenTopic(topic.id as TopicId);
             const status = getTopicStatus(topic.id as TopicId);
-            const lockedMessage = unlocked ? undefined : getLockedMessage(topic.id as TopicId);
+            const lockedMessage = unlocked
+              ? undefined
+              : profile?.role === 'student'
+                ? 'Modul ini terkunci untuk akses siswa. Minta guru membuka akses melalui Dashboard Guru.'
+                : getLockedMessage(topic.id as TopicId);
             return (
               <TopicCard
                 key={topic.id}

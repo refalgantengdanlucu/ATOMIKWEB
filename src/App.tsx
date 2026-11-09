@@ -1,6 +1,8 @@
 import { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
+import { AccessGate } from './components/AccessGate';
+import { AccessProvider } from './components/AccessProvider';
 import { HomePage } from './pages/HomePage';
 import { MateriPage } from './pages/MateriPage';
 import { MateriDetailPage } from './pages/MateriDetailPage';
@@ -28,8 +30,10 @@ export default function App() {
   return (
     <BrowserRouter>
       <RouteHashSync />
-      <Layout>
-        <Routes>
+      <AccessProvider>
+        <AccessGate>
+          <Layout>
+            <Routes>
           {/* 1. Halaman Beranda (Hanya menampilkan Hero & Panduan Fitur) */}
           <Route path="/" element={<HomePage />} />
 
@@ -61,9 +65,11 @@ export default function App() {
           <Route path="/kelas" element={<ClassroomToolsPage />} />
 
           {/* 7. Halaman 404 Tidak Ditemukan */}
-          <Route path="*" element={<NotFoundPage />} />
-        </Routes>
-      </Layout>
+              <Route path="*" element={<NotFoundPage />} />
+            </Routes>
+          </Layout>
+        </AccessGate>
+      </AccessProvider>
     </BrowserRouter>
   );
 }
