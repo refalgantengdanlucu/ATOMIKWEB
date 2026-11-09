@@ -48,7 +48,17 @@ npm run preview
 
 Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Tahapan progres, pertanyaan polling, bank soal, daftar nama guru, dan PIN dapat diedit pada `src/lib/classroom.ts`.
 
-Data kelas disimpan di `localStorage` browser. Artinya data bertahan di browser/perangkat yang sama, tetapi belum terkumpul lintas perangkat siswa; fitur polling memerlukan backend bersama untuk distribusi kelas lintas perangkat. Gerbang PIN di sisi klien adalah penghalang kasual, bukan kontrol akses yang aman untuk data sensitif. Ganti konstanta `TEACHER_PIN` sebelum publikasi.
+Data lokal disimpan di browser. Untuk merekap aktivitas lintas perangkat, proyek menyediakan Google Apps Script di `google-apps-script/Code.gs` yang menghubungkan spreadsheet dan mencatat aktivitas terakhir, riwayat perpindahan halaman, progres laporan, serta hasil kuis. Polling tetap lokal dan belum disinkronkan lintas perangkat. Gerbang PIN di sisi klien adalah penghalang kasual, bukan kontrol akses yang aman untuk data sensitif.
+
+### Menghubungkan Google Sheets
+
+1. Buka spreadsheet kelas, pilih **Ekstensi → Apps Script**, lalu salin isi `google-apps-script/Code.gs` ke editor Apps Script dan simpan. Script sudah memuat ID spreadsheet yang diberikan untuk proyek ini.
+2. Pilih **Deploy → New deployment → Web app**. Jalankan aplikasi sebagai akun pemilik spreadsheet dan atur akses ke **Anyone** agar browser siswa dapat mengirim data tanpa login Google. Tinjau implikasi akses publik: PIN ini hanya penghalang kasual; jangan simpan data sensitif.
+3. Deploy, izinkan akses saat diminta, lalu salin URL Web App yang berakhiran `/exec`.
+4. Tempel URL tersebut ke `CLASSROOM_SHEETS_WEB_APP_URL` pada `src/lib/classroom-sync.ts`, lalu build dan deploy ulang aplikasi.
+5. Setelah tersambung, tab **Aktivitas Siswa** menampilkan nama, kelas, halaman/topik terakhir, ringkasan progres materi, dan waktu terakhir aktif. Tab **Progres Tugas** dan **Kuis Reaksi** membaca data bersama dari spreadsheet; hasil kuis juga dicatat di tab `Hasil Kuis`. Dashboard memperbarui data cloud setiap 30 detik atau lewat tombol **Segarkan**.
+
+URL spreadsheet saja belum mengaktifkan sinkronisasi; koneksi baru aktif setelah Web App Apps Script di-deploy dan URL `/exec` diisi pada konfigurasi aplikasi.
 
 ## Gerbang Akses
 

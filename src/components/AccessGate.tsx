@@ -1,8 +1,14 @@
-import { useState, type FormEvent, type ReactNode } from 'react';
+import { useCallback, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { ArrowLeft, Atom, GraduationCap, LockKeyhole, UserRound } from 'lucide-react';
 import { TEACHER_NAMES, TEACHER_PIN } from '../lib/classroom';
 import { useAccess } from '../lib/access-context';
+import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
+import type { StudentActivity } from '../lib/classroom';
+import { sendActivityToSheets } from '../lib/classroom-sync';
+import { TOPICS } from '../data/topics';
+import { SECTIONS } from '../data/sections';
+import type { AccessProfile } from '../lib/access-context';
 import { Layout } from './Layout';
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-6 shadow-sm sm:p-9';
@@ -27,6 +33,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   if (blockedForStudent) {
     return (
       <Layout>
+        <StudentActivityReporter profile={profile} blocked />
         <section className={`${panelClass} mx-auto max-w-xl text-center`}>
           <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-[#C2410C]">
             <LockKeyhole className="h-7 w-7" aria-hidden="true" />
@@ -41,7 +48,85 @@ export function AccessGate({ children }: { children: ReactNode }) {
     );
   }
 
-  return <>{children}</>;
+  return (
+    <>
+      <StudentActivityReporter profile={profile} />
+      {children}
+    </>
+  );
+}
+
+function StudentActivityReporter({ profile, blocked = false }: { profile: AccessProfile; blocked?: boolean }) {
+  const location = useLocation();
+
+  const reportActivity = useCallback((sectionId?: string) => {
+    if (profile.role !== 'student') return;
+
+    const section = TOPICS.find((topic) => location.pathname === `/materi/${topic.id}`);
+    const labMode = location.pathname.match(/^\/(?:laboratorium|lab)\/(partikel|kalkulator|ion)$/)?.[1];
+    const quiz = location.pathname.match(/^\/kuis\/(t[123])$/)?.[1];
+    const activity = section
+      ? `Materi · ${section.title}`
+      : location.pathname === '/materi'
+        ? 'Materi · daftar topik'
+        : labMode
+          ? `Laboratorium · ${labMode === 'partikel' ? 'Lab Partikel' : labMode === 'kalkulator' ? 'Kalkulator Partikel' : 'Simulator Ion'}`
+          : quiz
+            ? `Evaluasi · Kuis ${quiz.toUpperCase()}`
+            : location.pathname === '/kelas'
+              ? location.search.startsWith('?aktivitas=') ? 'Kegiatan kelas · ' + location.search.slice(11) : 'Kegiatan kelas'
+              : 'Beranda';
+    const currentActivity = blocked ? `${activity} · akses terkunci` : activity;
+
+    const visitKey = `atomika-student-visits-v1:${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
+    let visitedSectionIds: string[] = [];
+    try {
+      const savedVisits = window.localStorage.getItem(visitKey);
+      visitedSectionIds = savedVisits ? JSON.parse(savedVisits) as string[] : [];
+    } catch (error) {
+      console.error('Gagal membaca progres topik siswa:', error);
+    }
+    if (sectionId && SECTIONS.some((item) => item.id === sectionId) && !visitedSectionIds.includes(sectionId)) {
+      visitedSectionIds = [...visitedSectionIds, sectionId];
+      try {
+        window.localStorage.setItem(visitKey, JSON.stringify(visitedSectionIds));
+      } catch (error) {
+        console.error('Gagal menyimpan progres topik siswa:', error);
+      }
+    }
+    const progressSummary = TOPICS.map((topic, index) => {
+      const count = topic.sectionIds.filter((id) => visitedSectionIds.includes(id)).length;
+      return `T${index + 1} ${count}/${topic.sectionIds.length}`;
+    }).join(' · ');
+    const record: StudentActivity = {
+      name: profile.name,
+      className: profile.className,
+      activity: currentActivity,
+      path: `${location.pathname}${location.search}`,
+      progressSummary,
+      lastSeen: new Date().toISOString(),
+    };
+    const activities = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
+    const studentKey = `${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
+    const nextActivities = [
+      ...activities.filter((item) => `${item.name.trim().toLocaleLowerCase('id-ID')}|${item.className.trim().toLocaleLowerCase('id-ID')}` !== studentKey),
+      record,
+    ];
+    writeClassroomData(CLASSROOM_STORAGE_KEYS.activity, nextActivities);
+    void sendActivityToSheets(profile, record);
+  }, [blocked, location.pathname, location.search, profile]);
+
+  useEffect(() => {
+    reportActivity();
+    const onSectionRead = (event: Event) => {
+      const detail = (event as CustomEvent<{ sectionId: string }>).detail;
+      if (detail?.sectionId) reportActivity(detail.sectionId);
+    };
+    window.addEventListener('atomika-student-section-read', onSectionRead);
+    return () => window.removeEventListener('atomika-student-section-read', onSectionRead);
+  }, [reportActivity]);
+
+  return null;
 }
 
 function AccessLanding() {

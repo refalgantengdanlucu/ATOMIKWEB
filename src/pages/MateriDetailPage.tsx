@@ -70,6 +70,9 @@ export function MateriDetailPage() {
     if (activeSection && activeSection.id !== prevActiveSectionIdRef.current) {
       prevActiveSectionIdRef.current = activeSection.id;
       markAsRead(activeSection.id);
+      window.dispatchEvent(new CustomEvent('atomika-student-section-read', {
+        detail: { sectionId: activeSection.id },
+      }));
     }
   }, [activeSection, markAsRead]);
 

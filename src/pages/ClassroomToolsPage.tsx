@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
@@ -21,10 +22,12 @@ import {
   readClassroomData,
   writeClassroomData,
 } from '../lib/classroom';
-import type { AttendanceRecord, PollSession, QuizAttempt, StudentProgress } from '../lib/classroom';
+import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress } from '../lib/classroom';
 import { useAccess } from '../lib/access-context';
+import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
+import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
 
-type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress';
+type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity';
 
 const TABS: { id: ActivityTab; title: string; description: string; icon: typeof Activity }[] = [
   { id: 'quiz', title: 'Kuis Reaksi', description: '10 soal klasifikasi reaksi', icon: ClipboardList },
@@ -32,6 +35,7 @@ const TABS: { id: ActivityTab; title: string; description: string; icon: typeof 
   { id: 'attendance', title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
   { id: 'progress', title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
 ];
+const TEACHER_TABS = [...TABS, { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users }];
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-8';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:opacity-50';
@@ -58,13 +62,94 @@ function currentTimestamp(): string {
   return new Date().toISOString();
 }
 
+function studentActivityKey(activity: StudentActivity): string {
+  return `${normalizeStudentName(activity.name)}|${normalizeStudentName(activity.className)}`;
+}
+
+function mergeActivities(local: StudentActivity[], remote: StudentActivity[]): StudentActivity[] {
+  const records = new Map<string, StudentActivity>();
+  for (const activity of [...local, ...remote]) {
+    const key = studentActivityKey(activity);
+    const existing = records.get(key);
+    if (!existing || Date.parse(activity.lastSeen) > Date.parse(existing.lastSeen)) {
+      records.set(key, activity);
+    }
+  }
+  return [...records.values()].sort((a, b) => Date.parse(b.lastSeen) - Date.parse(a.lastSeen));
+}
+
+function mergeQuizResults(local: QuizAttempt[], remote: TrackedQuizResult[]): TrackedQuizResult[] {
+  const results = new Map<string, TrackedQuizResult>();
+  for (const result of [...local, ...remote]) {
+    const submittedAt = new Date(result.submittedAt).toISOString();
+    const normalized = {
+      ...result,
+      submittedAt,
+      className: result.className ?? '',
+      quizTitle: result.quizTitle ?? 'Klasifikasi Jenis Reaksi Kimia',
+      maxScore: 'maxScore' in result && typeof result.maxScore === 'number' ? result.maxScore : 10,
+      percent: 'percent' in result && typeof result.percent === 'number' ? result.percent : Math.round((result.score / 10) * 100),
+    };
+    const key = `${normalizeStudentName(normalized.name)}|${normalizeStudentName(normalized.className)}|${normalized.score}|${Date.parse(normalized.submittedAt)}`;
+    results.set(key, normalized);
+  }
+  return [...results.values()].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt));
+}
+
+function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
+  const rows = [
+    ['Nama', 'Kelas', 'Kuis', 'Skor', 'Skor Maksimum', 'Nilai (%)', 'Waktu'],
+    ...results.map((result) => [
+      result.name,
+      result.className,
+      result.quizTitle,
+      String(result.score),
+      String(result.maxScore),
+      String(result.percent),
+      result.submittedAt,
+    ]),
+  ];
+  const csv = `\uFEFF${rows.map((row) => row.map((cell) => {
+    const safeCell = /^[=+\-@]/.test(cell) ? `'${cell}` : cell;
+    return `"${safeCell.replace(/"/g, '""')}"`;
+  }).join(',')).join('\r\n')}`;
+  const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = 'hasil-kuis-atomika.csv';
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
+
+function mergeStudentProgress(local: StudentProgress[], remote: StudentProgress[]): StudentProgress[] {
+  const records = new Map<string, StudentProgress>();
+  for (const student of [...local, ...remote]) {
+    const key = `${normalizeStudentName(student.name)}|${normalizeStudentName(student.className ?? '')}`;
+    const existing = records.get(key);
+    if (!existing || Date.parse(student.updatedAt) > Date.parse(existing.updatedAt)) records.set(key, student);
+  }
+  return [...records.values()].sort(
+    (a, b) => a.completedStages.length - b.completedStages.length || a.name.localeCompare(b.name, 'id'),
+  );
+}
+
 export function ClassroomToolsPage() {
-  const [activeTab, setActiveTab] = useState<ActivityTab>('quiz');
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedTab = searchParams.get('aktivitas');
+  const [activeTab, setActiveTabState] = useState<ActivityTab>(
+    TEACHER_TABS.some((tab) => tab.id === requestedTab) ? requestedTab as ActivityTab : 'quiz',
+  );
   const [storageError, setStorageError] = useState('');
-  const [, setRefreshKey] = useState(0);
+  const [refreshKey, setRefreshKey] = useState(0);
   const { profile } = useAccess();
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
+  const setActiveTab = (tab: ActivityTab) => {
+    setActiveTabState(tab);
+    setSearchParams({ aktivitas: tab }, { replace: true });
+  };
 
   useEffect(() => {
     const sync = () => refresh();
@@ -92,6 +177,7 @@ export function ClassroomToolsPage() {
   const pollSession = readClassroomData<PollSession>(CLASSROOM_STORAGE_KEYS.poll, { id: 'poll-1', responses: [] });
   const attendanceRecords = readClassroomData<AttendanceRecord[]>(CLASSROOM_STORAGE_KEYS.attendance, []);
   const studentProgress = readClassroomData<StudentProgress[]>(CLASSROOM_STORAGE_KEYS.progress, []);
+  const activityRecords = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
 
   const newestAttendanceDay = attendanceRecords.reduce(
     (latest, record) => (record.date > latest ? record.date : latest),
@@ -123,7 +209,9 @@ export function ClassroomToolsPage() {
       {storageError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{storageError}</p>}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
-        Data kelas tersimpan di browser/perangkat ini. Rekap lintas perangkat memerlukan backend bersama.
+        {isSheetsSyncConfigured()
+          ? 'Aktivitas dan hasil kuis disinkronkan ke Google Sheets. Dashboard dapat disegarkan untuk mengambil data siswa lintas perangkat.'
+          : 'Pelacakan lokal aktif. Untuk mengumpulkan data lintas perangkat ke spreadsheet, deploy Apps Script lalu isi URL Web App pada classroom-sync.ts.'}
       </div>
 
       {profile?.role === 'teacher' ? (
@@ -138,6 +226,8 @@ export function ClassroomToolsPage() {
           newestAttendanceDay={newestAttendanceDay}
           latestDayCount={latestDayCount}
           progress={orderedProgress}
+          activities={activityRecords}
+          refreshVersion={refreshKey}
         />
       ) : (
         <>
@@ -157,23 +247,24 @@ export function ClassroomToolsPage() {
             ))}
           </div>
 
-          {activeTab === 'quiz' && <ReactionQuiz key={profile.name} initialName={profile.name} onSave={save} attempts={quizAttempts} />}
+          {activeTab === 'quiz' && <ReactionQuiz key={profile.name} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
           {activeTab === 'poll' && <StudentPoll key={pollSession.id} onSave={save} pollSession={pollSession} />}
           {activeTab === 'attendance' && <StudentAttendance key={profile.name} initialName={profile.name} onSave={save} records={attendanceRecords} />}
-          {activeTab === 'progress' && <StudentTaskProgress key={profile.name} initialName={profile.name} onSave={save} progress={studentProgress} />}
+          {activeTab === 'progress' && <StudentTaskProgress key={`${profile.name}|${profile.className}`} initialName={profile.name} className={profile.className} onSave={save} progress={studentProgress} />}
         </>
       )}
     </div>
   );
 }
 
-function ReactionQuiz({ initialName, onSave, attempts }: { initialName: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
+function ReactionQuiz({ initialName, className, onSave, attempts }: { initialName: string; className: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
   const [name] = useState(initialName);
   const [questionIndex, setQuestionIndex] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   const [answers, setAnswers] = useState<boolean[]>([]);
   const [finished, setFinished] = useState(false);
   const [savedScore, setSavedScore] = useState<number | null>(null);
+  const [syncMessage, setSyncMessage] = useState('');
   const question = REACTION_QUESTIONS[questionIndex];
 
   const finishQuiz = (nextAnswers: boolean[]) => {
@@ -181,12 +272,23 @@ function ReactionQuiz({ initialName, onSave, attempts }: { initialName: string; 
     const attempt: QuizAttempt = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: name.trim().replace(/\s+/g, ' '),
+      className,
+      quizTitle: 'Klasifikasi Jenis Reaksi Kimia',
       score,
       submittedAt: new Date().toISOString(),
     };
     if (onSave(CLASSROOM_STORAGE_KEYS.quiz, [...attempts, attempt])) {
       setSavedScore(score);
       setFinished(true);
+      void sendQuizToSheets(attempt, className).then((result) => {
+        setSyncMessage(
+          result === 'sent'
+            ? 'Permintaan sinkronisasi Google Sheets terkirim. Pastikan hasil muncul di spreadsheet.'
+            : result === 'failed'
+              ? 'Nilai tersimpan di browser, tetapi pengiriman ke Google Sheets gagal.'
+              : 'Nilai tersimpan di browser. Sinkronisasi Google Sheets belum diaktifkan.',
+        );
+      });
     }
   };
 
@@ -197,6 +299,7 @@ function ReactionQuiz({ initialName, onSave, attempts }: { initialName: string; 
         <p className="text-sm font-semibold text-[#64748B]">Kuis selesai, {name.trim()}!</p>
         <h2 className="mt-1 text-4xl font-black text-[#172033]">{savedScore ?? 0}<span className="text-xl text-[#64748B]"> / 10</span></h2>
         <p className="mt-2 text-sm text-[#475569]">Ini adalah hasil kuismu. Hanya kamu yang melihat skor di halaman ini.</p>
+        <p role="status" className="mt-3 text-xs text-[#64748B]">{syncMessage || 'Menyimpan hasil kuis...'}</p>
         <button type="button" className={`${buttonClass} mt-6`} onClick={() => { setQuestionIndex(-1); setSelected(null); setAnswers([]); setFinished(false); setSavedScore(null); }}>Selesai</button>
       </section>
     );
@@ -342,14 +445,18 @@ function StudentAttendance({ initialName, onSave, records }: { initialName: stri
   );
 }
 
-function StudentTaskProgress({ initialName, onSave, progress }: { initialName: string; onSave: (key: string, value: unknown) => boolean; progress: StudentProgress[] }) {
+function StudentTaskProgress({ initialName, className, onSave, progress }: { initialName: string; className: string; onSave: (key: string, value: unknown) => boolean; progress: StudentProgress[] }) {
   const [name] = useState(initialName);
   const [loadedName, setLoadedName] = useState('');
   const [completedStages, setCompletedStages] = useState<number[]>([]);
   const [saveMessage, setSaveMessage] = useState('');
+  const [syncMessage, setSyncMessage] = useState('');
 
   const loadStudent = () => {
-    const matched = progress.find((student) => normalizeStudentName(student.name) === normalizeStudentName(name));
+    const matched = progress.find(
+      (student) => normalizeStudentName(student.name) === normalizeStudentName(name) &&
+        normalizeStudentName(student.className ?? '') === normalizeStudentName(className),
+    );
     const studentName = matched?.name ?? name.trim().replace(/\s+/g, ' ');
     setLoadedName(studentName);
     setCompletedStages(matched?.completedStages ?? []);
@@ -359,14 +466,26 @@ function StudentTaskProgress({ initialName, onSave, progress }: { initialName: s
     const nextStages = checked
       ? [...completedStages, index].sort((a, b) => a - b)
       : completedStages.filter((stage) => stage !== index);
-    const updated: StudentProgress = { name: loadedName, completedStages: nextStages, updatedAt: currentTimestamp() };
+    const updated: StudentProgress = { name: loadedName, className, completedStages: nextStages, updatedAt: currentTimestamp() };
     const nextRoster = [
-      ...progress.filter((student) => normalizeStudentName(student.name) !== normalizeStudentName(loadedName)),
+      ...progress.filter((student) =>
+        normalizeStudentName(student.name) !== normalizeStudentName(loadedName) ||
+        normalizeStudentName(student.className ?? '') !== normalizeStudentName(className),
+      ),
       updated,
     ];
     if (onSave(CLASSROOM_STORAGE_KEYS.progress, nextRoster)) {
       setCompletedStages(nextStages);
       setSaveMessage('Progres tersimpan.');
+      void sendProgressToSheets(updated, className).then((result) => {
+        setSyncMessage(
+          result === 'sent'
+            ? 'Permintaan sinkronisasi Google Sheets terkirim.'
+            : result === 'failed'
+              ? 'Sinkronisasi gagal; progres tetap tersimpan di browser.'
+              : 'Spreadsheet belum tersambung; progres tersimpan di browser.',
+        );
+      });
     } else {
       setSaveMessage('Progres belum berhasil disimpan.');
     }
@@ -398,6 +517,7 @@ function StudentTaskProgress({ initialName, onSave, progress }: { initialName: s
             })}
           </div>
           <p aria-live="polite" className="mt-3 min-h-5 text-xs text-[#64748B]">{saveMessage}</p>
+          <p aria-live="polite" className="text-xs text-[#64748B]">{syncMessage}</p>
           <button type="button" onClick={() => { setLoadedName(''); setSaveMessage(''); }} className="mt-2 text-sm font-semibold text-[#C2410C] underline">Kembali</button>
         </>
       )}
@@ -416,6 +536,8 @@ function TeacherDashboard({
   newestAttendanceDay,
   latestDayCount,
   progress,
+  activities,
+  refreshVersion,
 }: {
   activeTab: ActivityTab;
   onTabChange: (tab: ActivityTab) => void;
@@ -427,13 +549,50 @@ function TeacherDashboard({
   newestAttendanceDay: string;
   latestDayCount: number;
   progress: StudentProgress[];
+  activities: StudentActivity[];
+  refreshVersion: number;
 }) {
   const [pollResetMessage, setPollResetMessage] = useState('');
-  const sortedAttempts = [...attempts].sort((a, b) => b.submittedAt.localeCompare(a.submittedAt));
+  const [sheetsData, setSheetsData] = useState<TeacherSheetsData | null>(null);
+  const [sheetsError, setSheetsError] = useState('');
+  const [sheetsLoading, setSheetsLoading] = useState(false);
   const answerCounts = POLL_OPTIONS.map((_, optionIndex) =>
     pollSession.responses.filter((response) => response.optionIndex === optionIndex).length,
   );
   const totalResponses = pollSession.responses.length;
+
+  const refreshSheets = useCallback(async () => {
+    await Promise.resolve();
+    if (!isSheetsSyncConfigured()) {
+      setSheetsData(null);
+      setSheetsError('Google Sheets belum tersambung. Deploy google-apps-script/Code.gs, lalu isi CLASSROOM_SHEETS_WEB_APP_URL di src/lib/classroom-sync.ts.');
+      return;
+    }
+    setSheetsLoading(true);
+    setSheetsError('');
+    try {
+      setSheetsData(await loadTeacherDataFromSheets());
+    } catch (error) {
+      console.error('Gagal memuat dashboard dari Google Sheets:', error);
+      setSheetsError(error instanceof Error ? error.message : 'Gagal memuat data Google Sheets.');
+    } finally {
+      setSheetsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (activeTab !== 'activity' && activeTab !== 'quiz' && activeTab !== 'progress') return;
+    const initialRefresh = window.setTimeout(() => { void refreshSheets(); }, 0);
+    const intervalId = window.setInterval(() => { void refreshSheets(); }, 30000);
+    return () => {
+      window.clearTimeout(initialRefresh);
+      window.clearInterval(intervalId);
+    };
+  }, [activeTab, refreshVersion, refreshSheets]);
+
+  const latestActivities = mergeActivities(activities, sheetsData?.activities ?? []);
+  const allQuizResults = mergeQuizResults(attempts, sheetsData?.quizzes ?? []);
+  const allProgress = mergeStudentProgress(progress, sheetsData?.progress ?? []);
 
   const startNewPoll = () => {
     const newSession: PollSession = { id: crypto.randomUUID(), responses: [] };
@@ -456,25 +615,28 @@ function TeacherDashboard({
       </div>
 
       <div className="flex gap-2 overflow-x-auto pb-1">
-        {TABS.map(({ id, title }) => (
+        {TEACHER_TABS.map(({ id, title }) => (
           <button type="button" key={id} onClick={() => onTabChange(id)} className={`shrink-0 rounded-full px-4 py-2 text-sm font-bold ${activeTab === id ? 'bg-[#C2410C] text-white' : 'border border-[#F1E5D8] bg-white text-[#475569]'}`}>{title}</button>
         ))}
       </div>
 
+      {sheetsError && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">{sheetsError}</p>}
+
       {activeTab === 'quiz' && (
         <div className={panelClass}>
           <div className="mb-5 flex items-center justify-between gap-3">
-            <div><h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3><p className="text-sm text-[#64748B]">{attempts.length} pengerjaan tersimpan · terbaru dahulu</p></div>
+            <div><h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3><p className="text-sm text-[#64748B]">{allQuizResults.length} pengerjaan tersimpan · terbaru dahulu {sheetsLoading && '· menyegarkan...'}</p></div>
             <Users className="h-5 w-5 text-[#F97316]" aria-hidden="true" />
           </div>
-          {sortedAttempts.length ? (
+          {allQuizResults.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[540px] text-left text-sm">
-                <thead className="border-b border-[#F1E5D8] text-xs uppercase text-[#64748B]"><tr><th className="px-3 py-3">Nama</th><th className="px-3 py-3">Skor</th><th className="px-3 py-3">Waktu</th><th className="px-3 py-3">Tanggal & waktu</th></tr></thead>
-                <tbody>{sortedAttempts.map((attempt) => <tr key={attempt.id} className="border-b border-[#F1E5D8]/70"><td className="px-3 py-3 font-semibold">{attempt.name}</td><td className="px-3 py-3">{attempt.score}/10</td><td className="px-3 py-3">{formatTime(attempt.submittedAt)}</td><td className="px-3 py-3">{formatDateTime(attempt.submittedAt)}</td></tr>)}</tbody>
+                <thead className="border-b border-[#F1E5D8] text-xs uppercase text-[#64748B]"><tr><th className="px-3 py-3">Nama</th><th className="px-3 py-3">Kelas</th><th className="px-3 py-3">Skor / Nilai</th><th className="px-3 py-3">Tanggal & waktu</th></tr></thead>
+                <tbody>{allQuizResults.map((attempt) => <tr key={attempt.id} className="border-b border-[#F1E5D8]/70"><td className="px-3 py-3 font-semibold">{attempt.name}</td><td className="px-3 py-3">{attempt.className || '—'}</td><td className="px-3 py-3">{attempt.score}/10 · {Math.round((attempt.score / 10) * 100)}%</td><td className="px-3 py-3">{formatDateTime(attempt.submittedAt)}</td></tr>)}</tbody>
               </table>
             </div>
           ) : <EmptyState text="Belum ada hasil kuis." />}
+          <button type="button" onClick={() => downloadQuizSpreadsheet(allQuizResults)} className="mt-4 inline-flex min-h-10 items-center rounded-xl border border-[#F1E5D8] px-3 text-sm font-semibold hover:bg-orange-50">Unduh spreadsheet CSV</button>
         </div>
       )}
 
@@ -525,12 +687,12 @@ function TeacherDashboard({
       {activeTab === 'progress' && (
         <div className={panelClass}>
           <div className="mb-5"><h3 className="text-lg font-bold text-[#172033]">Progres laporan praktikum</h3><p className="text-sm text-[#64748B]">Diurutkan dari tahap paling sedikit selesai</p></div>
-          {progress.length ? (
+          {allProgress.length ? (
             <div className="space-y-3">
-              {progress.map((student) => (
-                <article key={normalizeStudentName(student.name)} className="rounded-2xl border border-[#F1E5D8] p-4">
+              {allProgress.map((student) => (
+                <article key={`${normalizeStudentName(student.name)}|${normalizeStudentName(student.className ?? '')}`} className="rounded-2xl border border-[#F1E5D8] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
-                    <h4 className="font-bold text-[#172033]">{student.name}</h4>
+                    <h4 className="font-bold text-[#172033]">{student.name}{student.className && <span className="ml-2 text-xs font-medium text-[#64748B]">{student.className}</span>}</h4>
                     <span className="text-xs font-bold text-[#9A3412]">{student.completedStages.length} dari {PROGRESS_STAGES.length} tahap</span>
                   </div>
                   <div className="mt-3 grid gap-2 sm:grid-cols-2">
@@ -544,6 +706,36 @@ function TeacherDashboard({
               ))}
             </div>
           ) : <EmptyState text="Belum ada siswa yang mengisi progres." />}
+        </div>
+      )}
+      {activeTab === 'activity' && (
+        <div className={panelClass}>
+          <div className="mb-5 flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h3 className="text-lg font-bold text-[#172033]">Aktivitas terakhir setiap siswa</h3>
+              <p className="text-sm text-[#64748B]">Menunjukkan topik, laboratorium, atau aktivitas terakhir yang dibuka.</p>
+            </div>
+            <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-[#9A3412]">{latestActivities.length} siswa</span>
+          </div>
+          {sheetsLoading && <p className="mb-3 text-xs text-[#64748B]">Memuat aktivitas dari spreadsheet…</p>}
+          {latestActivities.length ? (
+            <div className="overflow-x-auto">
+              <table className="w-full min-w-[700px] text-left text-sm">
+                <thead className="border-b border-[#F1E5D8] text-xs uppercase text-[#64748B]">
+                  <tr><th className="px-3 py-3">Nama</th><th className="px-3 py-3">Kelas</th><th className="px-3 py-3">Terakhir di</th><th className="px-3 py-3">Progres materi</th><th className="px-3 py-3">Terakhir aktif</th></tr>
+                </thead>
+                <tbody>{latestActivities.map((student) => (
+                  <tr key={`${normalizeStudentName(student.name)}|${normalizeStudentName(student.className)}`} className="border-b border-[#F1E5D8]/70 align-top">
+                    <td className="px-3 py-3 font-semibold">{student.name}</td>
+                    <td className="px-3 py-3">{student.className}</td>
+                    <td className="px-3 py-3">{student.activity}</td>
+                    <td className="px-3 py-3">{student.progressSummary}</td>
+                    <td className="px-3 py-3 whitespace-nowrap">{formatDateTime(student.lastSeen)}</td>
+                  </tr>
+                ))}</tbody>
+              </table>
+            </div>
+          ) : <EmptyState text="Belum ada aktivitas siswa. Data akan muncul setelah siswa masuk dan membuka materi atau modul." />}
         </div>
       )}
     </section>

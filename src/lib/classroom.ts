@@ -5,6 +5,7 @@ export const CLASSROOM_STORAGE_KEYS = {
   poll: 'atomika-classroom-poll-v1',
   attendance: 'atomika-classroom-attendance-v1',
   progress: 'atomika-classroom-progress-v1',
+  activity: 'atomika-classroom-activity-v1',
 } as const;
 
 export const REACTION_TYPES = [
@@ -95,6 +96,8 @@ export interface QuizAttempt {
   name: string;
   score: number;
   submittedAt: string;
+  className?: string;
+  quizTitle?: string;
 }
 
 export interface PollResponse {
@@ -116,8 +119,18 @@ export interface AttendanceRecord {
 
 export interface StudentProgress {
   name: string;
+  className?: string;
   completedStages: number[];
   updatedAt: string;
+}
+
+export interface StudentActivity {
+  name: string;
+  className: string;
+  activity: string;
+  path: string;
+  progressSummary: string;
+  lastSeen: string;
 }
 
 export function normalizeStudentName(name: string): string {
