@@ -42,7 +42,7 @@ export function getElectronCount(atomicNumber: number, charge: number): number {
 
 export function getBohrShells(electronCount: number): number[] {
   let remaining = Math.max(0, Math.floor(electronCount));
-  const capacities = [2, 8, 8, 2];
+  const capacities = [2, 8, 8, Number.POSITIVE_INFINITY];
   return capacities.map((capacity) => {
     const count = Math.min(remaining, capacity);
     remaining -= count;

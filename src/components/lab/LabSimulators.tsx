@@ -372,9 +372,16 @@ export function IonSimulator() {
               <p className="mt-3 text-xs text-[#475569]">
                 Elektron per kulit: <strong>K {shellCounts[0]} · L {shellCounts[1]} · M {shellCounts[2]} · N {shellCounts[3]}</strong>
               </p>
+              <p className="mt-2 text-xs leading-5 text-[#475569]">
+                {isNeutral
+                  ? 'Muatan total nol karena jumlah proton dan elektron sama.'
+                  : isCation
+                    ? `Atom melepas ${charge} elektron; jumlah proton tetap.`
+                    : `Atom menerima ${Math.abs(charge)} elektron; jumlah proton tetap.`}
+              </p>
             </div>
             <div className="grid grid-cols-2 gap-3">
-              <button type="button" onClick={() => setElectronCount((count) => count + 1)} disabled={electronCount >= 40} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-900 transition hover:bg-blue-100 disabled:opacity-40"><Plus className="h-4 w-4" aria-hidden="true" />Terima elektron</button>
+              <button type="button" onClick={() => setElectronCount((count) => count + 1)} disabled={electronCount >= 22} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 text-sm font-bold text-blue-900 transition hover:bg-blue-100 disabled:opacity-40"><Plus className="h-4 w-4" aria-hidden="true" />Terima elektron</button>
               <button type="button" onClick={() => setElectronCount((count) => Math.max(0, count - 1))} disabled={electronCount <= 0} className="inline-flex min-h-12 items-center justify-center gap-2 rounded-xl border border-orange-200 bg-orange-50 px-3 text-sm font-bold text-orange-950 transition hover:bg-orange-100 disabled:opacity-40"><Minus className="h-4 w-4" aria-hidden="true" />Lepas elektron</button>
             </div>
             <div className="flex flex-wrap gap-2">
