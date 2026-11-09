@@ -1,5 +1,5 @@
 import { NavLink, useLocation, Link } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles } from 'lucide-react';
 
 interface NavItem {
   to: string;
@@ -19,7 +19,6 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: '/kuis', label: 'Kuis', icon: HelpCircle },
   { to: '/progres', label: 'Progres', icon: Award },
-  { to: '/kelas', label: 'Kegiatan Kelas', icon: Users },
 ];
 
 export function Navbar() {

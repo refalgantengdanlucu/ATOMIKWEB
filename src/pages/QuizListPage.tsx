@@ -29,19 +29,19 @@ export function QuizListPage() {
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
             <div className="font-bold text-[#172033] text-sm">5 Soal per Paket</div>
             <p className="mt-1">
-              Setiap topik memiliki 5 butir soal pilihan ganda, benar/salah, atau isian angka.
+              Setiap topik memiliki 5 soal pilihan ganda dengan opsi A, B, C, D, dan E.
             </p>
           </div>
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
             <div className="font-bold text-[#172033] text-sm">Rumus Nilai</div>
             <p className="mt-1">
-              Nilai = (Benar ÷ 5) × 100. Nilai tertinggi (best) dan terakhir (last) akan disimpan.
+              Nilai = (jawaban benar ÷ 5) × 100. Nilai terakhir dan terbaik tersimpan di progres.
             </p>
           </div>
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
             <div className="font-bold text-[#172033] text-sm">Umpan Balik Instan</div>
             <p className="mt-1">
-              Setiap nomor langsung menampilkan pembahasan konsep dan tautan ke bagian terkait.
+              Jawaban dan pembahasan muncul setelah semua soal dijawab dan kuis dikirim.
             </p>
           </div>
         </div>
@@ -65,7 +65,7 @@ export function QuizListPage() {
                 {topic.title}
               </h3>
               <p className="text-xs text-[#475569] leading-relaxed mb-4">
-                Menguji pemahaman partikel, notasi atom, atau konsep muatan ion.
+                {topic.description}
               </p>
 
               <div className="space-y-1.5 text-xs text-[#475569] pt-2 border-t border-[#F1E5D8]">
