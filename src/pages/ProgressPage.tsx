@@ -3,10 +3,12 @@ import { Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { Award, RotateCcw, BookOpen, Atom, HelpCircle, Info, CheckCircle2, Lock } from 'lucide-react';
 import { useProgress, resetAllProgress } from '../lib/progress';
+import { useAccess } from '../lib/access-context';
 import type { TopicId } from '../types';
 
 export function ProgressPage() {
   const { progress, getTopicCompletion, isTopicUnlocked } = useProgress();
+  const { profile } = useAccess();
   const [confirmReset, setConfirmReset] = useState(false);
 
   const handleReset = () => {
@@ -60,7 +62,7 @@ export function ProgressPage() {
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {TOPICS.map((topic, index) => {
           const topicId = topic.id as TopicId;
-          const unlocked = isTopicUnlocked(topicId);
+          const unlocked = profile?.role === 'teacher' || isTopicUnlocked(topicId);
           const { completedCount, totalCount, percent, isCompleted } = getTopicCompletion(topicId);
 
           return (

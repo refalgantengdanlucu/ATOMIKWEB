@@ -1,6 +1,6 @@
 import { NavLink, useLocation, Link } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles } from 'lucide-react';
-
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut } from 'lucide-react';
+import { useAccess } from '../lib/access-context';
 interface NavItem {
   to: string;
   label: string;
@@ -19,10 +19,12 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: '/kuis', label: 'Kuis', icon: HelpCircle },
   { to: '/progres', label: 'Progres', icon: Award },
+  { to: '/kelas', label: 'Kegiatan Kelas', icon: Users },
 ];
 
 export function Navbar() {
   const location = useLocation();
+  const { profile, exit } = useAccess();
 
   // Memeriksa status aktif rute saat ini
   const checkIsActive = (item: NavItem) => {
@@ -89,6 +91,26 @@ export function Navbar() {
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = checkIsActive(item);
+              const isLocked =
+                profile?.role === 'student' &&
+                ['/laboratorium', '/kuis', '/progres'].includes(item.to);
+              const label = item.to === '/kelas' && profile?.role === 'teacher'
+                ? 'Dashboard Guru'
+                : item.label;
+
+              if (isLocked) {
+                return (
+                  <span
+                    key={item.to}
+                    aria-disabled="true"
+                    title="Terkunci untuk akses siswa"
+                    className="flex min-h-[44px] cursor-not-allowed items-center gap-2 rounded-xl border border-transparent px-3.5 py-2 text-sm font-semibold text-slate-400"
+                  >
+                    <LockKeyhole className="h-4 w-4" aria-hidden="true" />
+                    <span>{label}</span>
+                  </span>
+                );
+              }
 
               return (
                 <NavLink
@@ -107,11 +129,24 @@ export function Navbar() {
                     }`}
                     aria-hidden="true"
                   />
-                  <span>{item.label}</span>
+                  <span>{label}</span>
                 </NavLink>
               );
             })}
           </nav>
+
+          <div className="hidden sm:flex items-center gap-2">
+            <div className="text-right">
+              <p className="text-xs font-bold text-[#172033]">{profile?.name}</p>
+              <p className="text-[10px] text-[#64748B]">
+                {profile?.role === 'teacher' ? 'Akses Guru' : `Siswa · ${profile?.className}`}
+              </p>
+            </div>
+            <button type="button" onClick={exit} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#F1E5D8] px-3 text-xs font-semibold text-[#475569] hover:bg-orange-50" title="Keluar dan ganti akses">
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Keluar
+            </button>
+          </div>
 
           {/* Badge Kurikulum */}
           <div className="hidden lg:flex items-center gap-1.5 text-xs text-[#475569] bg-[#FFF8F0] px-3 py-1.5 rounded-full border border-[#F1E5D8]">
@@ -128,6 +163,26 @@ export function Navbar() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
+            const isLocked =
+              profile?.role === 'student' &&
+              ['/laboratorium', '/kuis', '/progres'].includes(item.to);
+            const label = item.to === '/kelas' && profile?.role === 'teacher'
+              ? 'Dashboard Guru'
+              : item.label;
+
+            if (isLocked) {
+              return (
+                <span
+                  key={item.to}
+                  aria-disabled="true"
+                  title="Terkunci untuk akses siswa"
+                  className="flex min-h-[36px] shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-slate-400"
+                >
+                  <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{label}</span>
+                </span>
+              );
+            }
 
             return (
               <NavLink
@@ -146,10 +201,14 @@ export function Navbar() {
                   }`}
                   aria-hidden="true"
                 />
-                <span>{item.label}</span>
+                <span>{label}</span>
               </NavLink>
             );
           })}
+          <button type="button" onClick={exit} className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-orange-50">
+            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+            Keluar
+          </button>
         </nav>
       </div>
     </header>

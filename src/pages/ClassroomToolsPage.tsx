@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type FormEvent } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import {
   Activity,
   BarChart3,
@@ -6,7 +6,6 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
-  LockKeyhole,
   RotateCw,
   Users,
 } from 'lucide-react';
@@ -20,11 +19,10 @@ import {
   REACTION_QUESTIONS,
   REACTION_TYPES,
   readClassroomData,
-  TEACHER_NAMES,
-  TEACHER_PIN,
   writeClassroomData,
 } from '../lib/classroom';
 import type { AttendanceRecord, PollSession, QuizAttempt, StudentProgress } from '../lib/classroom';
+import { useAccess } from '../lib/access-context';
 
 type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress';
 
@@ -37,7 +35,6 @@ const TABS: { id: ActivityTab; title: string; description: string; icon: typeof 
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-8';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:opacity-50';
-const inputClass = 'min-h-12 w-full rounded-xl border border-[#E8D8C8] bg-white px-4 text-base text-[#172033] outline-none focus:border-[#C2410C] focus:ring-2 focus:ring-orange-100';
 
 function formatDateTime(value: string): string {
   return new Date(value).toLocaleString('id-ID', {
@@ -61,39 +58,11 @@ function currentTimestamp(): string {
   return new Date().toISOString();
 }
 
-function StudentNameInput({
-  value,
-  onChange,
-  label = 'Nama siswa',
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  label?: string;
-}) {
-  return (
-    <label className="block space-y-2 text-sm font-semibold text-[#172033]">
-      {label}
-      <input
-        className={inputClass}
-        autoComplete="name"
-        maxLength={80}
-        placeholder="Ketik nama lengkap"
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-      />
-    </label>
-  );
-}
-
 export function ClassroomToolsPage() {
   const [activeTab, setActiveTab] = useState<ActivityTab>('quiz');
-  const [teacherOpen, setTeacherOpen] = useState(false);
-  const [teacherName, setTeacherName] = useState<string>(TEACHER_NAMES[0]);
-  const [pin, setPin] = useState('');
-  const [teacherUnlocked, setTeacherUnlocked] = useState(false);
-  const [teacherError, setTeacherError] = useState('');
   const [storageError, setStorageError] = useState('');
   const [, setRefreshKey] = useState(0);
+  const { profile } = useAccess();
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
 
@@ -117,28 +86,7 @@ export function ClassroomToolsPage() {
     return true;
   }, [refresh]);
 
-  const openTeacherGate = () => {
-    setTeacherOpen(true);
-    setTeacherUnlocked(false);
-    setPin('');
-    setTeacherError('');
-  };
-
-  const unlockTeacher = (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    if (pin !== TEACHER_PIN) {
-      setTeacherError('PIN belum sesuai. Coba lagi.');
-      return;
-    }
-    setTeacherError('');
-    setTeacherUnlocked(true);
-  };
-
-  const dismissTeacher = () => {
-    setTeacherUnlocked(false);
-    setTeacherOpen(false);
-    setPin('');
-  };
+  if (!profile) return null;
 
   const quizAttempts = readClassroomData<QuizAttempt[]>(CLASSROOM_STORAGE_KEYS.quiz, []);
   const pollSession = readClassroomData<PollSession>(CLASSROOM_STORAGE_KEYS.poll, { id: 'poll-1', responses: [] });
@@ -162,70 +110,35 @@ export function ClassroomToolsPage() {
       <header className="flex flex-col justify-between gap-4 sm:flex-row sm:items-end">
         <div>
           <div className="mb-2 inline-flex items-center gap-2 rounded-full bg-[#FFEDD5] px-3 py-1 text-xs font-bold text-[#9A3412]">
-            <Activity className="h-4 w-4" aria-hidden="true" />
-            Kegiatan kelas kimia
+            {profile?.role === 'teacher' ? <Users className="h-4 w-4" aria-hidden="true" /> : <Activity className="h-4 w-4" aria-hidden="true" />}
+            {profile?.role === 'teacher' ? 'Dashboard Guru' : 'Kegiatan kelas kimia'}
           </div>
-          <h1 className="text-3xl font-extrabold tracking-tight text-[#172033] sm:text-4xl">Belajar bersama, pantau progres</h1>
+          <h1 className="text-3xl font-extrabold tracking-tight text-[#172033] sm:text-4xl">{profile?.role === 'teacher' ? 'Rekap dan pantau kelas' : 'Belajar bersama, pantau progres'}</h1>
           <p className="mt-2 max-w-2xl text-sm leading-6 text-[#475569]">
-            Kuis, cek pemahaman, presensi, dan pelacak tugas untuk kelas XI.
+            {profile?.role === 'teacher' ? `Selamat datang, ${profile.name}.` : 'Kuis, cek pemahaman, presensi, dan pelacak tugas untuk kelas XI.'}
           </p>
         </div>
-        {!teacherOpen && (
-          <button type="button" onClick={openTeacherGate} className="self-start rounded-lg px-3 py-2 text-xs font-semibold text-[#64748B] underline decoration-dotted underline-offset-4 hover:text-[#172033] sm:self-auto">
-            Akses Guru
-          </button>
-        )}
       </header>
-
-      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
-        Data disimpan di browser/perangkat ini. Agar hasil terkumpul dari perangkat siswa yang berbeda dan terlihat bersama secara live, aplikasi perlu dihubungkan ke backend bersama. PIN di sisi klien hanya penghalang kasual; bukan pengamanan data yang kuat.
-      </div>
 
       {storageError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{storageError}</p>}
 
-      {teacherOpen ? (
-        teacherUnlocked ? (
-          <TeacherDashboard
-            activeTab={activeTab}
-            onTabChange={setActiveTab}
-            onClose={dismissTeacher}
-            onRefresh={refresh}
-            onSave={save}
-            attempts={quizAttempts}
-            pollSession={pollSession}
-            attendanceRecords={groupedAttendance}
-            newestAttendanceDay={newestAttendanceDay}
-            latestDayCount={latestDayCount}
-            progress={orderedProgress}
-          />
-        ) : (
-          <form onSubmit={unlockTeacher} className={`${panelClass} mx-auto max-w-md`}>
-            <div className="mb-5 flex h-12 w-12 items-center justify-center rounded-2xl bg-orange-100 text-[#C2410C]">
-              <LockKeyhole className="h-6 w-6" aria-hidden="true" />
-            </div>
-            <h2 className="text-xl font-bold text-[#172033]">Masuk dashboard guru</h2>
-            <p className="mt-1 text-sm text-[#64748B]">Pilih nama guru dan masukkan PIN.</p>
-            <label className="mt-5 block space-y-2 text-sm font-semibold text-[#172033]">
-              Nama guru
-              <select value={teacherName} onChange={(event) => setTeacherName(event.target.value)} className={inputClass}>
-                {TEACHER_NAMES.map((name) => <option key={name}>{name}</option>)}
-              </select>
-            </label>
-            <label className="mt-4 block space-y-2 text-sm font-semibold text-[#172033]">
-              PIN
-              <input className={inputClass} inputMode="numeric" autoComplete="one-time-code" type="password" maxLength={12} value={pin} onChange={(event) => setPin(event.target.value)} />
-            </label>
-            <p className="mt-2 text-xs text-[#64748B]">Contoh format PIN: 0000000</p>
-            {teacherError && <p role="alert" className="mt-3 text-sm font-medium text-red-700">{teacherError}</p>}
-            <div className="mt-6 flex gap-3">
-              <button type="submit" className={buttonClass}>Buka dashboard</button>
-              <button type="button" onClick={dismissTeacher} className="min-h-11 rounded-xl px-4 text-sm font-semibold text-[#475569] hover:bg-orange-50">Batal</button>
-            </div>
-            <p className="mt-5 border-t border-[#F1E5D8] pt-4 text-xs leading-5 text-[#64748B]">
-              PIN disimpan di kode aplikasi dan dapat dilihat oleh pengguna teknis. Ini hanya penghalang kasual, bukan keamanan tingkat tinggi.
-            </p>
-          </form>
-        )
+      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
+        Data kelas tersimpan di browser/perangkat ini. Rekap lintas perangkat memerlukan backend bersama.
+      </div>
+
+      {profile?.role === 'teacher' ? (
+        <TeacherDashboard
+          activeTab={activeTab}
+          onTabChange={setActiveTab}
+          onRefresh={refresh}
+          onSave={save}
+          attempts={quizAttempts}
+          pollSession={pollSession}
+          attendanceRecords={groupedAttendance}
+          newestAttendanceDay={newestAttendanceDay}
+          latestDayCount={latestDayCount}
+          progress={orderedProgress}
+        />
       ) : (
         <>
           <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
@@ -244,18 +157,18 @@ export function ClassroomToolsPage() {
             ))}
           </div>
 
-          {activeTab === 'quiz' && <ReactionQuiz onSave={save} attempts={quizAttempts} />}
+          {activeTab === 'quiz' && <ReactionQuiz key={profile.name} initialName={profile.name} onSave={save} attempts={quizAttempts} />}
           {activeTab === 'poll' && <StudentPoll key={pollSession.id} onSave={save} pollSession={pollSession} />}
-          {activeTab === 'attendance' && <StudentAttendance onSave={save} records={attendanceRecords} />}
-          {activeTab === 'progress' && <StudentTaskProgress onSave={save} progress={studentProgress} />}
+          {activeTab === 'attendance' && <StudentAttendance key={profile.name} initialName={profile.name} onSave={save} records={attendanceRecords} />}
+          {activeTab === 'progress' && <StudentTaskProgress key={profile.name} initialName={profile.name} onSave={save} progress={studentProgress} />}
         </>
       )}
     </div>
   );
 }
 
-function ReactionQuiz({ onSave, attempts }: { onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
-  const [name, setName] = useState('');
+function ReactionQuiz({ initialName, onSave, attempts }: { initialName: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
+  const [name] = useState(initialName);
   const [questionIndex, setQuestionIndex] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
   const [answers, setAnswers] = useState<boolean[]>([]);
@@ -284,7 +197,7 @@ function ReactionQuiz({ onSave, attempts }: { onSave: (key: string, value: unkno
         <p className="text-sm font-semibold text-[#64748B]">Kuis selesai, {name.trim()}!</p>
         <h2 className="mt-1 text-4xl font-black text-[#172033]">{savedScore ?? 0}<span className="text-xl text-[#64748B]"> / 10</span></h2>
         <p className="mt-2 text-sm text-[#475569]">Ini adalah hasil kuismu. Hanya kamu yang melihat skor di halaman ini.</p>
-        <button type="button" className={`${buttonClass} mt-6`} onClick={() => { setName(''); setQuestionIndex(-1); setSelected(null); setAnswers([]); setFinished(false); setSavedScore(null); }}>Selesai</button>
+        <button type="button" className={`${buttonClass} mt-6`} onClick={() => { setQuestionIndex(-1); setSelected(null); setAnswers([]); setFinished(false); setSavedScore(null); }}>Selesai</button>
       </section>
     );
   }
@@ -296,8 +209,8 @@ function ReactionQuiz({ onSave, attempts }: { onSave: (key: string, value: unkno
         <h2 className="mt-2 text-2xl font-extrabold text-[#172033]">Kenali pola reaksinya</h2>
         <p className="mt-2 text-sm leading-6 text-[#475569]">Pilih jenis reaksi yang paling sesuai. Setiap jawaban mendapat umpan balik langsung.</p>
         <div className="mt-6 space-y-4">
-          <StudentNameInput value={name} onChange={setName} />
-          <button type="button" className={buttonClass} disabled={!name.trim()} onClick={() => setQuestionIndex(0)}>Mulai kuis</button>
+          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">Nama peserta: <strong className="text-[#172033]">{name}</strong></p>
+          <button type="button" className={buttonClass} onClick={() => setQuestionIndex(0)}>Mulai kuis</button>
         </div>
       </section>
     );
@@ -390,8 +303,8 @@ function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unk
   );
 }
 
-function StudentAttendance({ onSave, records }: { onSave: (key: string, value: unknown) => boolean; records: AttendanceRecord[] }) {
-  const [name, setName] = useState('');
+function StudentAttendance({ initialName, onSave, records }: { initialName: string; onSave: (key: string, value: unknown) => boolean; records: AttendanceRecord[] }) {
+  const name = initialName;
   const [confirmation, setConfirmation] = useState<{ name: string; time: string; duplicate: boolean } | null>(null);
 
   const checkIn = () => {
@@ -417,20 +330,20 @@ function StudentAttendance({ onSave, records }: { onSave: (key: string, value: u
         <div role="status" className={`mt-5 rounded-2xl p-5 ${confirmation.duplicate ? 'bg-amber-50 text-amber-950' : 'bg-green-50 text-green-900'}`}>
           <p className="font-bold">{confirmation.duplicate ? `Kamu sudah absen hari ini pukul ${formatTime(confirmation.time)}.` : 'Kehadiranmu tercatat!'}</p>
           <p className="mt-1 text-sm">{confirmation.name} · {formatDateTime(confirmation.time)}</p>
-          <button type="button" className="mt-4 text-sm font-semibold underline" onClick={() => { setName(''); setConfirmation(null); }}>Selesai</button>
+          <button type="button" className="mt-4 text-sm font-semibold underline" onClick={() => setConfirmation(null)}>Selesai</button>
         </div>
       ) : (
         <div className="mt-5 space-y-4">
-          <StudentNameInput value={name} onChange={setName} />
-          <button type="button" disabled={!name.trim()} className={`${buttonClass} min-h-14 w-full text-base`} onClick={checkIn}>Absen Sekarang</button>
+          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">Nama: <strong className="text-[#172033]">{name}</strong></p>
+          <button type="button" className={`${buttonClass} min-h-14 w-full text-base`} onClick={checkIn}>Absen Sekarang</button>
         </div>
       )}
     </section>
   );
 }
 
-function StudentTaskProgress({ onSave, progress }: { onSave: (key: string, value: unknown) => boolean; progress: StudentProgress[] }) {
-  const [name, setName] = useState('');
+function StudentTaskProgress({ initialName, onSave, progress }: { initialName: string; onSave: (key: string, value: unknown) => boolean; progress: StudentProgress[] }) {
+  const [name] = useState(initialName);
   const [loadedName, setLoadedName] = useState('');
   const [completedStages, setCompletedStages] = useState<number[]>([]);
   const [saveMessage, setSaveMessage] = useState('');
@@ -465,8 +378,8 @@ function StudentTaskProgress({ onSave, progress }: { onSave: (key: string, value
       <h2 className="mt-2 text-2xl font-extrabold text-[#172033]">Tandai tahap yang sudah selesai</h2>
       {!loadedName ? (
         <div className="mt-5 space-y-4">
-          <StudentNameInput value={name} onChange={setName} />
-          <button type="button" disabled={!name.trim()} className={buttonClass} onClick={loadStudent}>Lanjutkan progres</button>
+          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">Nama: <strong className="text-[#172033]">{name}</strong></p>
+          <button type="button" className={buttonClass} onClick={loadStudent}>Lanjutkan progres</button>
         </div>
       ) : (
         <>
@@ -485,7 +398,7 @@ function StudentTaskProgress({ onSave, progress }: { onSave: (key: string, value
             })}
           </div>
           <p aria-live="polite" className="mt-3 min-h-5 text-xs text-[#64748B]">{saveMessage}</p>
-          <button type="button" onClick={() => { setLoadedName(''); setName(''); setSaveMessage(''); }} className="mt-2 text-sm font-semibold text-[#C2410C] underline">Ganti nama siswa</button>
+          <button type="button" onClick={() => { setLoadedName(''); setSaveMessage(''); }} className="mt-2 text-sm font-semibold text-[#C2410C] underline">Kembali</button>
         </>
       )}
     </section>
@@ -495,7 +408,6 @@ function StudentTaskProgress({ onSave, progress }: { onSave: (key: string, value
 function TeacherDashboard({
   activeTab,
   onTabChange,
-  onClose,
   onRefresh,
   onSave,
   attempts,
@@ -507,7 +419,6 @@ function TeacherDashboard({
 }: {
   activeTab: ActivityTab;
   onTabChange: (tab: ActivityTab) => void;
-  onClose: () => void;
   onRefresh: () => void;
   onSave: (key: string, value: unknown) => boolean;
   attempts: QuizAttempt[];
@@ -541,7 +452,6 @@ function TeacherDashboard({
         </div>
         <div className="flex gap-2">
           <button type="button" onClick={onRefresh} className="inline-flex min-h-10 items-center gap-2 rounded-xl border border-[#F1E5D8] px-3 text-sm font-semibold hover:bg-orange-50"><RotateCw className="h-4 w-4" aria-hidden="true" />Segarkan</button>
-          <button type="button" onClick={onClose} className="min-h-10 rounded-xl px-3 text-sm font-semibold text-[#64748B] hover:bg-orange-50">Keluar guru</button>
         </div>
       </div>
 

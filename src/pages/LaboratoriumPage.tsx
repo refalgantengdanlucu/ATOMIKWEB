@@ -1,5 +1,6 @@
 import { useParams, Link, Navigate, useLocation } from 'react-router-dom';
 import { Atom, Calculator, Zap, Sparkles } from 'lucide-react';
+import { IonSimulator, NuclideCalculator, ParticleExplorer } from '../components/lab/LabSimulators';
 
 type LabMode = 'partikel' | 'kalkulator' | 'ion';
 
@@ -90,7 +91,7 @@ export function LaboratoriumPage() {
         })}
       </nav>
 
-      {/* Lab Mode Workspace Shell */}
+      {/* Workspace untuk setiap mode laboratorium */}
       <div className="rounded-3xl bg-white border border-[#F1E5D8] p-6 sm:p-10 shadow-xs min-h-[400px] flex flex-col justify-between">
         <div>
           <div className="flex items-center justify-between border-b border-[#F1E5D8] pb-4 mb-6">
@@ -107,22 +108,14 @@ export function LaboratoriumPage() {
             </span>
           </div>
 
-          <div className="bg-[#FFF8F0] rounded-2xl p-8 border border-[#F1E5D8] text-center max-w-xl mx-auto my-6">
-            <div className="w-12 h-12 rounded-2xl bg-[#FFEDD5] text-[#C2410C] flex items-center justify-center mx-auto mb-3">
-              <currentTab.icon className="w-6 h-6 text-[#F97316]" aria-hidden="true" />
-            </div>
-            <h3 className="font-bold text-base text-[#172033]">
-              Workspace {currentTab.label}
-            </h3>
-            <p className="mt-2 text-xs sm:text-sm text-[#475569] leading-relaxed">
-              Logika murni kalkulasi atom siap dijalankan di <strong>Milestone M2</strong>, dan antarmuka interaktif SVG simulator penuh terhubung pada <strong>Milestone M4</strong>.
-            </p>
-          </div>
+          {activeMode === 'partikel' && <ParticleExplorer />}
+          {activeMode === 'kalkulator' && <NuclideCalculator />}
+          {activeMode === 'ion' && <IonSimulator />}
         </div>
 
         <div className="text-xs text-[#64748B] pt-4 border-t border-[#F1E5D8] flex flex-wrap items-center justify-between gap-2">
           <span>Model visual: Bohr disederhanakan (ukuran tidak berskala)</span>
-          <span>Sesuai Batasan PRD Bagian 7.2</span>
+          <span>Perhitungan partikel mengikuti p = Z, n = A − Z, e = Z − q</span>
         </div>
       </div>
     </div>
@@ -131,4 +124,3 @@ export function LaboratoriumPage() {
 
 // Alias untuk kompatibilitas
 export const LabPage = LaboratoriumPage;
-

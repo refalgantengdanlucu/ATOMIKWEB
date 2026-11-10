@@ -49,3 +49,7 @@ npm run preview
 Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Tahapan progres, pertanyaan polling, bank soal, daftar nama guru, dan PIN dapat diedit pada `src/lib/classroom.ts`.
 
 Data kelas disimpan di `localStorage` browser. Artinya data bertahan di browser/perangkat yang sama, tetapi belum terkumpul lintas perangkat siswa; fitur polling memerlukan backend bersama untuk distribusi kelas lintas perangkat. Gerbang PIN di sisi klien adalah penghalang kasual, bukan kontrol akses yang aman untuk data sensitif. Ganti konstanta `TEACHER_PIN` sebelum publikasi.
+
+## Gerbang Akses
+
+Saat pertama membuka aplikasi, pilih **Akses Siswa** atau **Akses Guru**. Siswa mengisi nama lengkap dan kelas; sesi berlaku selama tab browser terbuka. Akses siswa dibatasi ke Topik 1, sedangkan Topik 2, Topik 3, Laboratorium Virtual, Progres/Evaluasi terkunci. Guru memilih Refaldi, Khilda, atau Wilda dan memakai PIN yang diatur oleh `TEACHER_PIN`; setelah valid, seluruh modul dan menu Dashboard Guru terbuka. Gerbang ini berjalan di sisi klien dan bukan pengamanan kuat.
