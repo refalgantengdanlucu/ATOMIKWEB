@@ -12,6 +12,7 @@ import { QuizSessionPage } from './pages/QuizSessionPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { ClassroomToolsPage } from './pages/ClassroomToolsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
+import { AuthPage } from './pages/AuthPage';
 
 // Sinkronisasi rute jika pengguna membuka URL berformat hash (#/materi)
 function RouteHashSync() {
@@ -31,45 +32,37 @@ export default function App() {
     <BrowserRouter>
       <RouteHashSync />
       <AccessProvider>
-        <AccessGate>
-          <Layout>
-            <Routes>
-          {/* 1. Halaman Beranda (Hanya menampilkan Hero & Panduan Fitur) */}
-          <Route path="/" element={<HomePage />} />
-
-          {/* 2. Halaman Materi Pembelajaran */}
-          <Route path="/materi" element={<MateriPage />} />
-          <Route path="/materi/:topicId" element={<MateriDetailPage />} />
-
-          {/* 3. Halaman Laboratorium Kimia Virtual */}
-          <Route
-            path="/laboratorium"
-            element={<Navigate to="/laboratorium/partikel" replace />}
-          />
-          <Route path="/laboratorium/:mode" element={<LaboratoriumPage />} />
-          {/* Kompatibilitas alias rute /lab */}
-          <Route
-            path="/lab"
-            element={<Navigate to="/laboratorium/partikel" replace />}
-          />
-          <Route path="/lab/:mode" element={<LaboratoriumPage />} />
-
-          {/* 4. Halaman Kuis Berumpan Balik */}
-          <Route path="/kuis" element={<QuizListPage />} />
-          <Route path="/kuis/:topicId" element={<QuizSessionPage />} />
-
-          {/* 5. Halaman Progres Belajar Anonim */}
-          <Route path="/progres" element={<ProgressPage />} />
-
-          {/* 6. Kuis, polling, presensi, dan progres kelas */}
-          <Route path="/kelas" element={<ClassroomToolsPage />} />
-
-          {/* 7. Halaman 404 Tidak Ditemukan */}
-              <Route path="*" element={<NotFoundPage />} />
-            </Routes>
-          </Layout>
-        </AccessGate>
+        <Routes>
+          <Route path="/login" element={<AuthPage />} />
+          <Route path="/register" element={<AuthPage />} />
+          <Route path="/forgot-password" element={<AuthPage />} />
+          <Route path="/reset-password" element={<AuthPage />} />
+          <Route path="/*" element={<ProtectedApp />} />
+        </Routes>
       </AccessProvider>
     </BrowserRouter>
+  );
+}
+
+function ProtectedApp() {
+  return (
+    <AccessGate>
+      <Layout>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/materi" element={<MateriPage />} />
+          <Route path="/materi/:topicId" element={<MateriDetailPage />} />
+          <Route path="/laboratorium" element={<Navigate to="/laboratorium/partikel" replace />} />
+          <Route path="/laboratorium/:mode" element={<LaboratoriumPage />} />
+          <Route path="/lab" element={<Navigate to="/laboratorium/partikel" replace />} />
+          <Route path="/lab/:mode" element={<LaboratoriumPage />} />
+          <Route path="/kuis" element={<QuizListPage />} />
+          <Route path="/kuis/:topicId" element={<QuizSessionPage />} />
+          <Route path="/progres" element={<ProgressPage />} />
+          <Route path="/kelas" element={<ClassroomToolsPage />} />
+          <Route path="*" element={<NotFoundPage />} />
+        </Routes>
+      </Layout>
+    </AccessGate>
   );
 }

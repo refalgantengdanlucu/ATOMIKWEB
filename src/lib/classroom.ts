@@ -1,4 +1,3 @@
-export const TEACHER_NAMES = ['Refaldi', 'Khilda', 'Wilda'] as const;
 export const TEACHER_PIN = '122333';
 export const CLASSROOM_STORAGE_KEYS = {
   quiz: 'atomika-classroom-quiz-v1',

@@ -1,5 +1,6 @@
 import { NavLink, useLocation, Link } from 'react-router-dom';
 import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut } from 'lucide-react';
+import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 interface NavItem {
   to: string;
@@ -25,6 +26,17 @@ const NAV_ITEMS: NavItem[] = [
 export function Navbar() {
   const location = useLocation();
   const { profile, exit } = useAccess();
+  const [logoutError, setLogoutError] = useState('');
+
+  const handleExit = async () => {
+    setLogoutError('');
+    try {
+      await exit();
+    } catch (error) {
+      console.error('Gagal mengakhiri sesi:', error);
+      setLogoutError('Sesi belum dapat diakhiri. Silakan coba lagi.');
+    }
+  };
 
   // Memeriksa status aktif rute saat ini
   const checkIsActive = (item: NavItem) => {
@@ -139,10 +151,10 @@ export function Navbar() {
             <div className="text-right">
               <p className="text-xs font-bold text-[#172033]">{profile?.name}</p>
               <p className="text-[10px] text-[#64748B]">
-                {profile?.role === 'teacher' ? 'Akses Guru' : `Siswa · ${profile?.className}`}
+                {profile?.role === 'teacher' ? 'Guru' : `Siswa · ${profile?.className}`}
               </p>
             </div>
-            <button type="button" onClick={exit} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#F1E5D8] px-3 text-xs font-semibold text-[#475569] hover:bg-orange-50" title="Keluar dan ganti akses">
+            <button type="button" onClick={() => void handleExit()} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#F1E5D8] px-3 text-xs font-semibold text-[#475569] hover:bg-orange-50" title="Keluar dari akun">
               <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
               Keluar
             </button>
@@ -154,6 +166,8 @@ export function Navbar() {
             <span>Kimia SMA/MA</span>
           </div>
         </div>
+
+        {logoutError && <p role="alert" className="pb-2 text-right text-xs font-semibold text-red-700">{logoutError}</p>}
 
         {/* Mobile Nav Bar (TETAP DI ATAS LAYAR, tidak disembunyikan, scrollable horizontal) */}
         <nav
@@ -205,7 +219,7 @@ export function Navbar() {
               </NavLink>
             );
           })}
-          <button type="button" onClick={exit} className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-orange-50">
+          <button type="button" onClick={() => void handleExit()} className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-orange-50">
             <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
             Keluar
           </button>

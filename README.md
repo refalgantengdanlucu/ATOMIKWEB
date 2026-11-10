@@ -60,9 +60,20 @@ Data lokal disimpan di browser. Untuk merekap aktivitas lintas perangkat, proyek
 
 URL spreadsheet saja belum mengaktifkan sinkronisasi; koneksi baru aktif setelah Web App Apps Script di-deploy dan URL `/exec` diisi pada konfigurasi aplikasi.
 
-## Gerbang Akses
+## Autentikasi
 
-Saat pertama membuka aplikasi, pilih **Akses Siswa** atau **Akses Guru**. Siswa mengisi nama lengkap dan kelas; sesi berlaku selama tab browser terbuka. Akses siswa dibatasi ke Topik 1, sedangkan Topik 2, Topik 3, Laboratorium Virtual, Progres/Evaluasi terkunci. Guru memilih Refaldi, Khilda, atau Wilda dan memakai PIN yang diatur oleh `TEACHER_PIN`; setelah valid, seluruh modul dan menu Dashboard Guru terbuka. Gerbang ini berjalan di sisi klien dan bukan pengamanan kuat.
+Semua halaman utama memerlukan sesi Supabase Auth. Buat proyek Supabase, salin `.env.example` menjadi `.env.local`, lalu isi URL proyek dan public anon/publishable key. Jangan pernah menaruh `service_role` key atau rahasia OAuth di frontend.
+
+Di Supabase:
+
+1. Aktifkan autentikasi email/password dan verifikasi email. Atur kebijakan password minimal 8 karakter dengan huruf besar, huruf kecil, dan angka.
+2. Pada **Authentication → URL Configuration**, isi Site URL dan tambahkan redirect untuk `/login` serta `/reset-password` pada URL lokal dan domain deployment.
+3. Untuk Google, aktifkan provider Google dan masukkan OAuth client ID/secret pada pengaturan provider Supabase. Daftarkan callback Supabase yang ditampilkan di dashboard pada Google Cloud Console.
+4. Akun baru menjadi siswa secara default. Akun guru harus ditetapkan melalui `app_metadata.role = "teacher"` memakai alat admin tepercaya di Supabase; jangan memberi role guru dari form browser atau `user_metadata`.
+
+Sesi dan token dikelola Supabase Auth, bukan kata sandi yang disimpan aplikasi. Opsi **Ingat saya di perangkat ini** mengatur apakah sesi browser bertahan setelah tab ditutup. Tombol lupa kata sandi mengirim tautan pemulihan email; konfigurasi SMTP dan redirect harus aktif agar email produksi dapat terkirim. Tanpa `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`, halaman menampilkan peringatan konfigurasi dan autentikasi tidak dapat digunakan.
+
+Pembatasan rute guru/siswa di website memakai role dari sesi Supabase. Integrasi Google Sheets lama tetap memakai PIN bersama pada Apps Script dan berjalan di luar Supabase; PIN tersebut bukan kontrol akses yang aman untuk data sensitif. Lindungi spreadsheet/deployment secara terpisah sebelum menggunakannya untuk data privat.
 
 ## Laboratorium Virtual
 
