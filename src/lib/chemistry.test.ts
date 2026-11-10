@@ -17,6 +17,7 @@ describe('chemical particle calculations', () => {
   it('distributes up to 20 electrons in simplified Bohr shells', () => {
     expect(getBohrShells(11)).toEqual([2, 8, 1, 0]);
     expect(getBohrShells(20)).toEqual([2, 8, 8, 2]);
+    expect(getBohrShells(22)).toEqual([2, 8, 8, 4]);
     expect(getBohrShells(0)).toEqual([0, 0, 0, 0]);
   });
 
