@@ -26,6 +26,14 @@ import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, Stude
 import { useAccess } from '../lib/access-context';
 import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
 import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
+import {
+  saveAttendance,
+  savePollResponse,
+  saveQuizAttempt,
+  saveStudentProgress,
+  subscribeQuizAttempts,
+  subscribeStudentActivities,
+} from '../lib/firebase-db';
 
 type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity';
 
@@ -280,6 +288,14 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
     if (onSave(CLASSROOM_STORAGE_KEYS.quiz, [...attempts, attempt])) {
       setSavedScore(score);
       setFinished(true);
+      const tracked: TrackedQuizResult = {
+        ...attempt,
+        className,
+        quizTitle: 'Klasifikasi Jenis Reaksi Kimia',
+        maxScore: 10,
+        percent: Math.round((score / 10) * 100),
+      };
+      void saveQuizAttempt(tracked);
       void sendQuizToSheets(attempt, className).then((result) => {
         setSyncMessage(
           result === 'sent'
@@ -371,6 +387,7 @@ function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unk
     if (choice === null) return;
     const response = { id: crypto.randomUUID(), optionIndex: choice, submittedAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.poll, { ...pollSession, responses: [...pollSession.responses, response] })) {
+      void savePollResponse(pollSession.id, response);
       try {
         window.localStorage.setItem(submittedKey, 'true');
         setSubmittedSessionId(pollSession.id);
@@ -421,6 +438,7 @@ function StudentAttendance({ initialName, onSave, records }: { initialName: stri
     }
     const record = { name: name.trim().replace(/\s+/g, ' '), date: today, checkedInAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.attendance, [...records, record])) {
+      void saveAttendance(record);
       setConfirmation({ name: record.name, time: record.checkedInAt, duplicate: false });
     }
   };
@@ -477,6 +495,7 @@ function StudentTaskProgress({ initialName, className, onSave, progress }: { ini
     if (onSave(CLASSROOM_STORAGE_KEYS.progress, nextRoster)) {
       setCompletedStages(nextStages);
       setSaveMessage('Progres tersimpan.');
+      void saveStudentProgress(updated);
       void sendProgressToSheets(updated, className).then((result) => {
         setSyncMessage(
           result === 'sent'
@@ -590,8 +609,26 @@ function TeacherDashboard({
     };
   }, [activeTab, refreshVersion, refreshSheets]);
 
-  const latestActivities = mergeActivities(activities, sheetsData?.activities ?? []);
-  const allQuizResults = mergeQuizResults(attempts, sheetsData?.quizzes ?? []);
+  const [firebaseActivities, setFirebaseActivities] = useState<StudentActivity[]>([]);
+  const [firebaseQuizzes, setFirebaseQuizzes] = useState<TrackedQuizResult[]>([]);
+
+  useEffect(() => {
+    const unsubActivities = subscribeStudentActivities((items) => setFirebaseActivities(items));
+    const unsubQuizzes = subscribeQuizAttempts((items) => setFirebaseQuizzes(items));
+    return () => {
+      unsubActivities();
+      unsubQuizzes();
+    };
+  }, []);
+
+  const latestActivities = mergeActivities(
+    mergeActivities(activities, sheetsData?.activities ?? []),
+    firebaseActivities
+  );
+  const allQuizResults = mergeQuizResults(
+    mergeQuizResults(attempts, sheetsData?.quizzes ?? []),
+    firebaseQuizzes
+  );
   const allProgress = mergeStudentProgress(progress, sheetsData?.progress ?? []);
 
   const startNewPoll = () => {
