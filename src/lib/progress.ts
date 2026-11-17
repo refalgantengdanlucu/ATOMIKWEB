@@ -127,6 +127,39 @@ export function isTopicCompleted(topicId: TopicId, visitedIds: string[]): boolea
 }
 
 /**
+ * Memeriksa apakah SEMUA materi (Topik 1, 2, dan 3) sudah selesai dibaca.
+ */
+export function isAllTopicsCompleted(visitedIds: string[]): boolean {
+  return TOPICS.every((t) => isTopicCompleted(t.id as TopicId, visitedIds));
+}
+
+/**
+ * Memeriksa apakah mode laboratorium tertentu sudah terbuka untuk siswa.
+ * - 'partikel': Terbuka setelah Topik 1 selesai dibaca.
+ * - 'kalkulator': Terbuka setelah Topik 2 selesai dibaca.
+ * - 'ion': Terbuka setelah Topik 3 selesai dibaca.
+ * Jika semua topik sudah selesai dibaca, seluruh laboratorium otomatis terbuka penuh.
+ */
+export function isLabModeUnlocked(mode: string, visitedIds: string[]): boolean {
+  if (isAllTopicsCompleted(visitedIds)) return true;
+  if (mode === 'partikel') return isTopicCompleted('t1', visitedIds);
+  if (mode === 'kalkulator') return isTopicCompleted('t2', visitedIds);
+  if (mode === 'ion') return isTopicCompleted('t3', visitedIds);
+  return isTopicCompleted('t1', visitedIds);
+}
+
+/**
+ * Memeriksa apakah paket kuis tertentu sudah terbuka untuk siswa.
+ * - 't1': Terbuka setelah Topik 1 selesai dibaca.
+ * - 't2': Terbuka setelah Topik 2 selesai dibaca.
+ * - 't3': Terbuka setelah Topik 3 selesai dibaca.
+ */
+export function isQuizTopicUnlocked(topicId: TopicId, visitedIds: string[]): boolean {
+  if (isAllTopicsCompleted(visitedIds)) return true;
+  return isTopicCompleted(topicId, visitedIds);
+}
+
+/**
  * Memeriksa apakah suatu bagian (section) berstatus terbuka (unlocked).
  * Aturan urutan materi dalam topik:
  * - Topik harus terbuka terlebih dahulu.
@@ -228,6 +261,9 @@ export function useProgress() {
       isSectionUnlocked(topicId, sectionId, progress.visitedSectionIds),
     getTopicCompletion: (topicId: TopicId) =>
       getTopicCompletion(topicId, progress.visitedSectionIds),
+    isAllTopicsCompleted: () => isAllTopicsCompleted(progress.visitedSectionIds),
+    isLabModeUnlocked: (mode: string) => isLabModeUnlocked(mode, progress.visitedSectionIds),
+    isQuizTopicUnlocked: (topicId: TopicId) => isQuizTopicUnlocked(topicId, progress.visitedSectionIds),
     resetProgress: resetAllProgress,
   };
 }

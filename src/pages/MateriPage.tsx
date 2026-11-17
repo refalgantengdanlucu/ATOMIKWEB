@@ -14,11 +14,9 @@ export function MateriPage() {
   const { profile } = useAccess();
   const visited = progress.visitedSectionIds;
   const canOpenTopic = (topicId: TopicId) =>
-    profile?.role === 'teacher' ||
-    (topicId === 't1' && isTopicUnlocked(topicId));
+    profile?.role === 'teacher' || isTopicUnlocked(topicId);
   const canOpenSection = (topicId: TopicId, sectionId: string) =>
-    profile?.role === 'teacher' ||
-    (topicId === 't1' && isSectionUnlocked(topicId, sectionId));
+    profile?.role === 'teacher' || isSectionUnlocked(topicId, sectionId);
 
   // Algoritma pencarian berbobot sisi klien (PRD Bagian 7.1)
   const searchResults = useMemo(() => {
@@ -203,9 +201,7 @@ export function MateriPage() {
             const status = getTopicStatus(topic.id as TopicId);
             const lockedMessage = unlocked
               ? undefined
-              : profile?.role === 'student'
-                ? 'Modul ini terkunci untuk akses siswa. Minta guru membuka akses melalui Dashboard Guru.'
-                : getLockedMessage(topic.id as TopicId);
+              : getLockedMessage(topic.id as TopicId);
             return (
               <TopicCard
                 key={topic.id}
