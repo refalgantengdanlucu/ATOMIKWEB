@@ -3,7 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
-import { saveQuizAttempt } from '../lib/firebase-db';
+import { saveQuizAttempt, saveStudentActivity } from '../lib/firebase-db';
+import { recordClassroomQuiz, recordStudentActivity, type TrackedQuizResult, type StudentActivity } from '../lib/classroom';
 import { getProgress, saveProgress, isTopicCompleted } from '../lib/progress';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock, ArrowRight } from 'lucide-react';
@@ -126,7 +127,7 @@ function QuizSession({ topic }: { topic: Topic }) {
     const score = Math.round((correctCount / questions.length) * 100);
 
     if (profile) {
-      void saveQuizAttempt({
+      const attempt: TrackedQuizResult = {
         id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
         name: profile.name,
         className: profile.role === 'student' ? profile.className : '',
@@ -135,7 +136,25 @@ function QuizSession({ topic }: { topic: Topic }) {
         maxScore: questions.length,
         percent: score,
         submittedAt: new Date().toISOString(),
-      });
+      };
+
+      // 1. Simpan ke database Firestore
+      void saveQuizAttempt(attempt);
+
+      // 2. Simpan ke rekapan kuis kelas agar langsung terbaca di akun guru
+      recordClassroomQuiz(attempt);
+
+      // 3. Catat aktivitas belajar siswa
+      const activityRecord: StudentActivity = {
+        name: profile.name,
+        className: profile.role === 'student' ? profile.className : '',
+        activity: `Menyelesaikan ${topic.title} (Nilai: ${score}%)`,
+        path: `/kuis/${topic.id}`,
+        progressSummary: `Skor: ${correctCount}/${questions.length} (${score}%)`,
+        lastSeen: attempt.submittedAt,
+      };
+      recordStudentActivity(activityRecord);
+      void saveStudentActivity(activityRecord);
     }
 
     const progress = getProgress();
@@ -192,6 +211,7 @@ function QuizSession({ topic }: { topic: Topic }) {
               {correctCount} dari {questions.length} benar · Nilai {Math.round((correctCount / questions.length) * 100)}%
             </p>
             <p className="mt-1 text-xs text-green-800">Jawaban benar, jawabanmu, dan pembahasan tersedia di setiap soal.</p>
+            <p className="mt-1 text-xs font-semibold text-emerald-800">✓ Nilai otomatis masuk ke rekap akun guru.</p>
           </div>
           <button type="button" onClick={restartQuiz} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#C2410C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#9A3412]">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />

@@ -188,8 +188,30 @@ export function subscribeStudentActivities(
  */
 export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
-  const attemptRef = doc(db, 'quiz_attempts', attempt.id);
-  await setDoc(attemptRef, attempt, { merge: true });
+  try {
+    const attemptRef = doc(db, 'quiz_attempts', attempt.id);
+    await setDoc(attemptRef, attempt, { merge: true });
+  } catch (error) {
+    console.warn('Gagal menyimpan hasil kuis ke Firebase:', error);
+  }
+}
+
+/**
+ * Mengambil seluruh data hasil kuis sekali panggil (direct fetch).
+ */
+export async function getQuizAttempts(): Promise<TrackedQuizResult[]> {
+  if (!db || !isFirebaseConfigured) return [];
+  try {
+    const q = query(collection(db, 'quiz_attempts'), limit(250));
+    const snapshot = await getDocs(q);
+    const items: TrackedQuizResult[] = [];
+    snapshot.forEach((d) => items.push(d.data() as TrackedQuizResult));
+    items.sort((a, b) => Date.parse(b.submittedAt || '') - Date.parse(a.submittedAt || ''));
+    return items;
+  } catch (error) {
+    console.warn('Gagal memuat hasil kuis langsung dari Firebase:', error);
+    return [];
+  }
 }
 
 /**
@@ -203,16 +225,17 @@ export function subscribeQuizAttempts(
     return () => {};
   }
 
-  const q = query(collection(db, 'quiz_attempts'), orderBy('submittedAt', 'desc'), limit(150));
+  const q = query(collection(db, 'quiz_attempts'), limit(250));
   return onSnapshot(
     q,
     (snapshot) => {
       const items: TrackedQuizResult[] = [];
       snapshot.forEach((d) => items.push(d.data() as TrackedQuizResult));
+      items.sort((a, b) => Date.parse(b.submittedAt || '') - Date.parse(a.submittedAt || ''));
       callback(items);
     },
     (error) => {
-      console.error('Gagal mengambil data kuis dari Firebase:', error);
+      console.warn('Gagal mengambil data kuis realtime dari Firebase:', error);
     }
   );
 }
