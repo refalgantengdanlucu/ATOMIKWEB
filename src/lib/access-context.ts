@@ -9,6 +9,7 @@ export type AuthStatus = 'loading' | 'ready';
 export interface AccessContextValue {
   profile: AccessProfile | null;
   status: AuthStatus;
+  clearProfile: () => void;
   exit: () => Promise<void>;
 }
 

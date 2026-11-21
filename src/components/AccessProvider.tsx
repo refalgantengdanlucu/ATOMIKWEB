@@ -1,21 +1,27 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react';
-import type { User } from '@supabase/supabase-js';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
 import { AccessContext, type AccessProfile, type AccessContextValue } from '../lib/access-context';
-import { supabase } from '../lib/supabase';
+import { auth, db } from '../lib/firebase';
 
-function profileFromUser(user: User | null): AccessProfile | null {
+async function profileFromUser(user: User | null): Promise<AccessProfile | null> {
   if (!user) return null;
 
-  const nameValue = user.user_metadata.full_name ?? user.user_metadata.name;
+  const [token, profileSnapshot] = await Promise.all([
+    user.getIdTokenResult(),
+    db ? getDoc(doc(db, 'profiles', user.uid)) : Promise.resolve(null),
+  ]);
+  const profile = profileSnapshot?.data();
+  const nameValue = profile?.name ?? user.displayName;
   const name = typeof nameValue === 'string' && nameValue.trim()
     ? nameValue.trim()
     : user.email ?? 'Pengguna ATOMIKA';
 
-  if (user.app_metadata.role === 'teacher') {
+  if (token.claims.role === 'teacher') {
     return { role: 'teacher', name };
   }
 
-  const classNameValue = user.user_metadata.class_name;
+  const classNameValue = profile?.className;
   return {
     role: 'student',
     name,
@@ -27,45 +33,60 @@ function profileFromUser(user: User | null): AccessProfile | null {
 
 export function AccessProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<AccessProfile | null>(null);
-  const [status, setStatus] = useState<'loading' | 'ready'>(supabase ? 'loading' : 'ready');
+  const [status, setStatus] = useState<'loading' | 'ready'>(auth ? 'loading' : 'ready');
+  const profileRevision = useRef(0);
+
+  const clearProfile = useCallback(() => {
+    profileRevision.current += 1;
+    setProfile(null);
+    setStatus('ready');
+  }, []);
 
   useEffect(() => {
-    if (!supabase) return;
+    if (!auth) return;
 
     let active = true;
-    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-      if (!active) return;
-      setProfile(profileFromUser(session?.user ?? null));
-      setStatus('ready');
-    });
+    const unsubscribe = onAuthStateChanged(auth, (user) => {
+      const currentRevision = ++profileRevision.current;
+      if (!user) {
+        setProfile(null);
+        setStatus('ready');
+        return;
+      }
 
-    void supabase.auth.getSession().then(({ data, error }) => {
-      if (!active) return;
-      if (error) console.error('Gagal memulihkan sesi autentikasi:', error);
-      setProfile(profileFromUser(data.session?.user ?? null));
-      setStatus('ready');
-    }).catch((error: unknown) => {
-      if (!active) return;
-      console.error('Gagal memulihkan sesi autentikasi:', error);
-      setStatus('ready');
+      setStatus('loading');
+      void profileFromUser(user).then((nextProfile) => {
+        if (!active || currentRevision !== profileRevision.current) return;
+        setProfile(nextProfile);
+        setStatus('ready');
+      }).catch((error: unknown) => {
+        if (!active || currentRevision !== profileRevision.current) return;
+        console.error('Gagal memulihkan profil autentikasi:', error);
+        setProfile({
+          role: 'student',
+          name: user.displayName?.trim() || user.email || 'Pengguna ATOMIKA',
+          className: 'Belum diatur',
+        });
+        setStatus('ready');
+      });
     });
 
     return () => {
       active = false;
-      subscription.unsubscribe();
+      unsubscribe();
     };
   }, []);
 
   const value = useMemo<AccessContextValue>(() => ({
     profile,
     status,
+    clearProfile,
     exit: async () => {
-      if (!supabase) throw new Error('Autentikasi belum dikonfigurasi.');
-      const { error } = await supabase.auth.signOut();
-      if (error) throw error;
+      if (!auth) throw new Error('Autentikasi Firebase belum dikonfigurasi.');
+      await signOut(auth);
       setProfile(null);
     },
-  }), [profile, status]);
+  }), [clearProfile, profile, status]);
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
 }

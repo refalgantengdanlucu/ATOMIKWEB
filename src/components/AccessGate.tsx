@@ -8,9 +8,16 @@ import { sendActivityToSheets } from '../lib/classroom-sync';
 import { TOPICS } from '../data/topics';
 import { SECTIONS } from '../data/sections';
 import type { AccessProfile } from '../lib/access-context';
+import { useProgress } from '../lib/progress';
+import type { TopicId } from '../types';
 
 export function AccessGate({ children }: { children: ReactNode }) {
   const { profile, status } = useAccess();
+  const {
+    isLaboratoryUnlocked,
+    areQuizzesUnlocked,
+    isQuizUnlocked,
+  } = useProgress();
   const location = useLocation();
 
   if (status === 'loading') {
@@ -25,14 +32,21 @@ export function AccessGate({ children }: { children: ReactNode }) {
     return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
   }
 
-  const blockedForStudent = profile.role === 'student' && (
-    location.pathname.startsWith('/laboratorium') ||
-    location.pathname.startsWith('/lab') ||
-    location.pathname.startsWith('/kuis') ||
-    location.pathname.startsWith('/progres')
-  );
+  const isStudent = profile.role === 'student';
+  const isLaboratoryRoute = location.pathname.startsWith('/laboratorium') || location.pathname.startsWith('/lab');
+  const isQuizRoute = location.pathname.startsWith('/kuis');
+  const quizTopicId = location.pathname.match(/^\/kuis\/(t[123])$/)?.[1] as TopicId | undefined;
+  const blockedMessage = !isStudent
+    ? undefined
+    : isLaboratoryRoute && !isLaboratoryUnlocked()
+      ? 'Selesaikan seluruh bagian materi Topik 1, 2, dan 3 untuk membuka Laboratorium.'
+      : isQuizRoute && !areQuizzesUnlocked()
+        ? 'Buka ketiga mode Laboratorium setelah menyelesaikan seluruh materi untuk membuka Kuis.'
+        : quizTopicId && !isQuizUnlocked(quizTopicId)
+          ? `Selesaikan kuis sebelumnya secara berurutan untuk membuka Kuis ${quizTopicId.slice(1)}.`
+          : undefined;
 
-  if (blockedForStudent) {
+  if (blockedMessage) {
     return (
       <>
         <StudentActivityReporter profile={profile} blocked />
@@ -41,12 +55,10 @@ export function AccessGate({ children }: { children: ReactNode }) {
             <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-[#C2410C]">
               <LockKeyhole className="h-7 w-7" aria-hidden="true" />
             </div>
-            <h1 className="text-2xl font-extrabold">Modul ini masih terkunci</h1>
-            <p className="mt-2 text-sm leading-6 text-[#475569]">
-              Laboratorium Virtual dan Evaluasi hanya dapat dibuka oleh akun guru.
-            </p>
-            <Link to="/materi" className="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-[#C2410C] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#9A3412]">
-              Kembali ke materi
+            <h1 className="text-2xl font-extrabold">Selesaikan tahap sebelumnya</h1>
+            <p className="mt-2 text-sm leading-6 text-[#475569]">{blockedMessage}</p>
+            <Link to="/progres" className="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-[#C2410C] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#9A3412]">
+              Lihat roadmap progres
             </Link>
           </section>
         </main>

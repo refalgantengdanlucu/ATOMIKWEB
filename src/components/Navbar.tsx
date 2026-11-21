@@ -2,6 +2,7 @@ import { NavLink, useLocation, Link } from 'react-router-dom';
 import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
+import { useProgress } from '../lib/progress';
 interface NavItem {
   to: string;
   label: string;
@@ -26,6 +27,7 @@ const NAV_ITEMS: NavItem[] = [
 export function Navbar() {
   const location = useLocation();
   const { profile, exit } = useAccess();
+  const { isLaboratoryUnlocked, areQuizzesUnlocked } = useProgress();
   const [logoutError, setLogoutError] = useState('');
 
   const handleExit = async () => {
@@ -103,9 +105,10 @@ export function Navbar() {
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = checkIsActive(item);
-              const isLocked =
-                profile?.role === 'student' &&
-                ['/laboratorium', '/kuis', '/progres'].includes(item.to);
+              const isLocked = profile?.role === 'student' && (
+                (item.to === '/laboratorium' && !isLaboratoryUnlocked()) ||
+                (item.to === '/kuis' && !areQuizzesUnlocked())
+              );
               const label = item.to === '/kelas' && profile?.role === 'teacher'
                 ? 'Dashboard Guru'
                 : item.label;
@@ -115,7 +118,9 @@ export function Navbar() {
                   <span
                     key={item.to}
                     aria-disabled="true"
-                    title="Terkunci untuk akses siswa"
+                    title={item.to === '/laboratorium'
+                      ? 'Selesaikan semua materi Topik 1–3 untuk membuka laboratorium'
+                      : 'Selesaikan semua mode laboratorium untuk membuka kuis'}
                     className="flex min-h-[44px] cursor-not-allowed items-center gap-2 rounded-xl border border-transparent px-3.5 py-2 text-sm font-semibold text-slate-400"
                   >
                     <LockKeyhole className="h-4 w-4" aria-hidden="true" />
@@ -177,9 +182,10 @@ export function Navbar() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
-            const isLocked =
-              profile?.role === 'student' &&
-              ['/laboratorium', '/kuis', '/progres'].includes(item.to);
+            const isLocked = profile?.role === 'student' && (
+              (item.to === '/laboratorium' && !isLaboratoryUnlocked()) ||
+              (item.to === '/kuis' && !areQuizzesUnlocked())
+            );
             const label = item.to === '/kelas' && profile?.role === 'teacher'
               ? 'Dashboard Guru'
               : item.label;
@@ -189,7 +195,9 @@ export function Navbar() {
                 <span
                   key={item.to}
                   aria-disabled="true"
-                  title="Terkunci untuk akses siswa"
+                  title={item.to === '/laboratorium'
+                    ? 'Selesaikan semua materi Topik 1–3 untuk membuka laboratorium'
+                    : 'Selesaikan semua mode laboratorium untuk membuka kuis'}
                   className="flex min-h-[36px] shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-slate-400"
                 >
                   <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />

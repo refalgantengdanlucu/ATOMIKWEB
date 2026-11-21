@@ -1,7 +1,16 @@
 import { describe, it, expect } from 'vitest';
 import { TOPICS } from '../data/topics';
 import { SECTIONS } from '../data/sections';
-import { isTopicUnlocked, isSectionUnlocked, isTopicCompleted } from '../lib/progress';
+import {
+  areAllLabModesCompleted,
+  areQuizzesUnlocked,
+  isLaboratoryUnlocked,
+  isQuizUnlocked,
+  isTopicUnlocked,
+  isSectionUnlocked,
+  isTopicCompleted,
+} from '../lib/progress';
+import type { LocalProgress } from '../types';
 
 describe('ATOMIKA Initial Setup & Modul Kemendikbud KD 3.2', () => {
   it('harus memuat 3 topik pembelajaran', () => {
@@ -44,6 +53,15 @@ describe('ATOMIKA Initial Setup & Modul Kemendikbud KD 3.2', () => {
 describe('Sistem Penguncian Berurutan (Sequential Locking)', () => {
   const t1Ids = TOPICS.find((t) => t.id === 't1')!.sectionIds;
   const t2Ids = TOPICS.find((t) => t.id === 't2')!.sectionIds;
+  const allSectionIds = TOPICS.flatMap((topic) => topic.sectionIds);
+  const makeProgress = (overrides: Partial<LocalProgress> = {}): LocalProgress => ({
+    version: 1,
+    visitedSectionIds: [],
+    labDone: { t1: false, t2: false, t3: false },
+    quizResults: {},
+    updatedAt: new Date(0).toISOString(),
+    ...overrides,
+  });
 
   // --- isTopicUnlocked ---
   it('Topik 1 selalu terbuka', () => {
@@ -87,6 +105,45 @@ describe('Sistem Penguncian Berurutan (Sequential Locking)', () => {
 
   it('Bagian pertama Topik 2 terbuka jika Topik 1 selesai semua', () => {
     expect(isSectionUnlocked('t2', t2Ids[0], [...t1Ids])).toBe(true);
+  });
+
+  it('Bagian pertama Topik 3 terbuka jika seluruh bagian Topik 1 dan 2 selesai', () => {
+    const t3Ids = TOPICS.find((t) => t.id === 't3')!.sectionIds;
+    expect(isSectionUnlocked('t3', t3Ids[0], [...t1Ids, ...t2Ids])).toBe(true);
+  });
+
+  it('Laboratorium terbuka hanya setelah seluruh materi tiga topik selesai', () => {
+    expect(isLaboratoryUnlocked(makeProgress({ visitedSectionIds: allSectionIds.slice(0, -1) }))).toBe(false);
+    expect(isLaboratoryUnlocked(makeProgress({ visitedSectionIds: allSectionIds }))).toBe(true);
+  });
+
+  it('Kuis terbuka setelah semua mode lab dan mengikuti urutan pengiriman', () => {
+    const progress = makeProgress({
+      visitedSectionIds: allSectionIds,
+      labDone: { t1: true, t2: true, t3: true },
+    });
+
+    expect(areAllLabModesCompleted(progress)).toBe(true);
+    expect(areQuizzesUnlocked(progress)).toBe(true);
+    expect(isQuizUnlocked('t1', progress)).toBe(true);
+    expect(isQuizUnlocked('t2', progress)).toBe(false);
+
+    progress.quizResults.t1 = {
+      attempts: 1,
+      lastScore: 80,
+      bestScore: 80,
+      lastCompletedAt: new Date(0).toISOString(),
+    };
+    expect(isQuizUnlocked('t2', progress)).toBe(true);
+    expect(isQuizUnlocked('t3', progress)).toBe(false);
+
+    progress.quizResults.t2 = {
+      attempts: 1,
+      lastScore: 100,
+      bestScore: 100,
+      lastCompletedAt: new Date(0).toISOString(),
+    };
+    expect(isQuizUnlocked('t3', progress)).toBe(true);
   });
 
   // --- isTopicCompleted ---

@@ -17,6 +17,14 @@ const DEFAULT_PROGRESS: LocalProgress = {
   updatedAt: new Date().toISOString(),
 };
 
+export const LAB_MODES = [
+  { id: 'partikel', label: 'Lab Partikel', topicId: 't1' },
+  { id: 'kalkulator', label: 'Kalkulator Partikel', topicId: 't2' },
+  { id: 'ion', label: 'Simulator Ion', topicId: 't3' },
+] as const;
+
+export type LabModeId = (typeof LAB_MODES)[number]['id'];
+
 /**
  * Membaca data progres dari localStorage secara aman dengan fallback.
  */
@@ -35,7 +43,10 @@ export function getProgress(): LocalProgress {
         ...DEFAULT_PROGRESS,
         ...parsed,
         visitedSectionIds: parsed.visitedSectionIds,
-        labDone: parsed.labDone || DEFAULT_PROGRESS.labDone,
+        labDone: {
+          ...DEFAULT_PROGRESS.labDone,
+          ...(parsed.labDone && typeof parsed.labDone === 'object' ? parsed.labDone : {}),
+        },
         quizResults: parsed.quizResults || DEFAULT_PROGRESS.quizResults,
       };
     }
@@ -124,6 +135,48 @@ export function isTopicCompleted(topicId: TopicId, visitedIds: string[]): boolea
   const topic = TOPICS.find((t) => t.id === topicId);
   if (!topic) return false;
   return topic.sectionIds.every((id) => visitedIds.includes(id));
+}
+
+export function areAllTopicsCompleted(visitedIds: string[]): boolean {
+  return TOPICS.every((topic) => isTopicCompleted(topic.id, visitedIds));
+}
+
+export function isLaboratoryUnlocked(progress: LocalProgress): boolean {
+  return areAllTopicsCompleted(progress.visitedSectionIds);
+}
+
+export function areAllLabModesCompleted(progress: LocalProgress): boolean {
+  return LAB_MODES.every(({ topicId }) => progress.labDone[topicId]);
+}
+
+export function areQuizzesUnlocked(progress: LocalProgress): boolean {
+  return isLaboratoryUnlocked(progress) && areAllLabModesCompleted(progress);
+}
+
+export function isQuizUnlocked(topicId: TopicId, progress: LocalProgress): boolean {
+  if (!areQuizzesUnlocked(progress)) return false;
+
+  const topicIndex = TOPICS.findIndex((topic) => topic.id === topicId);
+  if (topicIndex === -1) return false;
+
+  return TOPICS.slice(0, topicIndex).every(
+    (topic) => (progress.quizResults[topic.id]?.attempts ?? 0) > 0
+  );
+}
+
+export function markLabModeComplete(modeId: LabModeId): LocalProgress {
+  const mode = LAB_MODES.find(({ id }) => id === modeId);
+  if (!mode) return getProgress();
+
+  const current = getProgress();
+  if (current.labDone[mode.topicId]) return current;
+
+  const updated: LocalProgress = {
+    ...current,
+    labDone: { ...current.labDone, [mode.topicId]: true },
+  };
+  saveProgress(updated);
+  return updated;
 }
 
 /**
@@ -224,6 +277,11 @@ export function useProgress() {
     markAsRead: markSectionRead,
     isTopicUnlocked: (topicId: TopicId) => isTopicUnlocked(topicId, progress.visitedSectionIds),
     isTopicCompleted: (topicId: TopicId) => isTopicCompleted(topicId, progress.visitedSectionIds),
+    isLaboratoryUnlocked: () => isLaboratoryUnlocked(progress),
+    areAllLabModesCompleted: () => areAllLabModesCompleted(progress),
+    areQuizzesUnlocked: () => areQuizzesUnlocked(progress),
+    isQuizUnlocked: (topicId: TopicId) => isQuizUnlocked(topicId, progress),
+    markLabModeComplete,
     isSectionUnlocked: (topicId: TopicId, sectionId: string) =>
       isSectionUnlocked(topicId, sectionId, progress.visitedSectionIds),
     getTopicCompletion: (topicId: TopicId) =>

@@ -15,10 +15,10 @@ export function MateriPage() {
   const visited = progress.visitedSectionIds;
   const canOpenTopic = (topicId: TopicId) =>
     profile?.role === 'teacher' ||
-    (topicId === 't1' && isTopicUnlocked(topicId));
+    isTopicUnlocked(topicId);
   const canOpenSection = (topicId: TopicId, sectionId: string) =>
     profile?.role === 'teacher' ||
-    (topicId === 't1' && isSectionUnlocked(topicId, sectionId));
+    isSectionUnlocked(topicId, sectionId);
 
   // Algoritma pencarian berbobot sisi klien (PRD Bagian 7.1)
   const searchResults = useMemo(() => {

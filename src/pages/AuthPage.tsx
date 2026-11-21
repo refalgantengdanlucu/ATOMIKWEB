@@ -1,8 +1,22 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { AlertCircle, ArrowLeft, Atom, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
+import {
+  confirmPasswordReset,
+  createUserWithEmailAndPassword,
+  GoogleAuthProvider,
+  sendEmailVerification,
+  sendPasswordResetEmail,
+  signInWithEmailAndPassword,
+  signInWithPopup,
+  signOut,
+  updateProfile,
+  verifyPasswordResetCode,
+  type AuthError,
+} from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 import { useAccess } from '../lib/access-context';
-import { getRememberSession, isSupabaseConfigured, setRememberSession, supabase } from '../lib/supabase';
+import { applySessionPersistence, auth, db, getRememberSession, isFirebaseConfigured, setRememberSession } from '../lib/firebase';
 import './AuthPage.css';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password';
@@ -27,14 +41,20 @@ function passwordStrength(value: string) {
   ].filter(Boolean).length;
 }
 
-function errorMessage(error: { message: string }) {
-  const message = error.message.toLowerCase();
-  if (message.includes('invalid login credentials')) return 'Email atau kata sandi tidak sesuai.';
-  if (message.includes('user already registered')) return 'Email ini sudah terdaftar. Silakan login.';
-  if (message.includes('password should be')) return 'Kata sandi belum memenuhi kebijakan keamanan.';
-  if (message.includes('email not confirmed')) return 'Verifikasi email Anda terlebih dahulu sebelum login.';
-  if (message.includes('rate limit')) return 'Terlalu banyak percobaan. Coba lagi beberapa saat.';
-  return error.message;
+function errorMessage(error: { message: string; code?: string }) {
+  const messages: Record<string, string> = {
+    'auth/invalid-credential': 'Email atau kata sandi tidak sesuai.',
+    'auth/email-already-in-use': 'Email ini sudah terdaftar. Silakan login.',
+    'auth/weak-password': 'Kata sandi belum memenuhi kebijakan keamanan.',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi beberapa saat.',
+    'auth/popup-closed-by-user': 'Jendela login Google ditutup sebelum proses selesai.',
+    'auth/unauthorized-domain': 'Domain website belum diizinkan pada konfigurasi Firebase Authentication.',
+    'auth/operation-not-allowed': 'Metode autentikasi ini belum diaktifkan pada Firebase.',
+    'auth/expired-action-code': 'Tautan reset kata sandi sudah kedaluwarsa. Minta tautan baru.',
+    'auth/invalid-action-code': 'Tautan reset kata sandi tidak valid atau sudah digunakan.',
+    'auth/network-request-failed': 'Tidak dapat terhubung ke Firebase. Periksa koneksi internet, lalu coba lagi.',
+  };
+  return (error.code && messages[error.code]) || error.message;
 }
 
 function safeReturnPath(value: unknown) {
@@ -99,12 +119,13 @@ function GoogleMark() {
 export function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, status } = useAccess();
+  const { profile, status, clearProfile } = useAccess();
   const mode = location.pathname.replace(/^\//, '') as AuthMode;
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
   const isForgot = mode === 'forgot-password';
   const isReset = mode === 'reset-password';
+  const resetCode = new URLSearchParams(location.search).get('oobCode');
   const stateFrom = (location.state as { from?: unknown } | null)?.from;
   const queryFrom = new URLSearchParams(location.search).get('next');
   const returnTo = safeReturnPath(stateFrom ?? queryFrom);
@@ -116,6 +137,7 @@ export function AuthPage() {
   const [confirmation, setConfirmation] = useState('');
   const [remember, setRemember] = useState(getRememberSession);
   const [busy, setBusy] = useState(false);
+  const [resetCodeValid, setResetCodeValid] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const routeNotice = (location.state as { notice?: string } | null)?.notice ?? '';
@@ -123,7 +145,18 @@ export function AuthPage() {
   const strength = useMemo(() => passwordStrength(password), [password]);
 
   useEffect(() => {
-    if (status === 'ready' && profile && !isReset) navigate(returnTo, { replace: true });
+    if (!isReset || !resetCode || !auth) return;
+    void verifyPasswordResetCode(auth, resetCode).then(() => {
+      setResetCodeValid(true);
+    }).catch((caught: AuthError) => {
+      setError(errorMessage(caught));
+    });
+  }, [isReset, resetCode]);
+
+  useEffect(() => {
+    if (status === 'ready' && profile && auth?.currentUser && !isReset) {
+      navigate(returnTo, { replace: true });
+    }
   }, [isReset, navigate, profile, returnTo, status]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -131,7 +164,7 @@ export function AuthPage() {
     setError('');
     setNotice('');
 
-    if (!supabase) {
+    if (!auth) {
       setError('Layanan autentikasi belum dikonfigurasi. Hubungi administrator website.');
       return;
     }
@@ -153,67 +186,83 @@ export function AuthPage() {
     try {
       if (isLogin) {
         setRememberSession(remember);
-        const { error: authError } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
-        });
-        if (authError) throw authError;
+        clearProfile();
+        if (auth.currentUser) await signOut(auth);
+        await applySessionPersistence();
+        const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (!user.emailVerified) {
+          await signOut(auth);
+          throw new Error('Verifikasi email Anda terlebih dahulu sebelum login.');
+        }
         navigate(returnTo, { replace: true });
         return;
       }
 
       if (isRegister) {
         setRememberSession(remember);
-        const { data, error: authError } = await supabase.auth.signUp({
-          email: email.trim(),
-          password,
-          options: {
-            data: {
-              full_name: name.trim().replace(/\s+/g, ' '),
-              class_name: className.trim().replace(/\s+/g, ' '),
-            },
-            emailRedirectTo: `${window.location.origin}/login`,
-          },
-        });
-        if (authError) throw authError;
-        if (data.session) {
-          const { error: signOutError } = await supabase.auth.signOut();
-          if (signOutError) throw signOutError;
+        await applySessionPersistence();
+        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const fullName = name.trim().replace(/\s+/g, ' ');
+        try {
+          await updateProfile(user, { displayName: fullName });
+          if (!db) throw new Error('Database Firebase belum dikonfigurasi.');
+          await setDoc(doc(db, 'profiles', user.uid), {
+            name: fullName,
+            className: className.trim().replace(/\s+/g, ' '),
+          });
+          await sendEmailVerification(user, {
+            url: `${window.location.origin}/login`,
+            handleCodeInApp: true,
+          });
+        } catch (caught) {
+          await signOut(auth);
+          throw caught;
         }
+        await signOut(auth);
         navigate('/login', {
           replace: true,
-          state: { notice: 'Akun berhasil dibuat. Silakan login kembali menggunakan akun Anda.' },
+          state: { notice: 'Akun berhasil dibuat. Verifikasi email dari kotak masuk sebelum login.' },
         });
         return;
       }
 
       if (isForgot) {
-        const { error: authError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-          redirectTo: `${window.location.origin}/reset-password`,
+        await sendPasswordResetEmail(auth, email.trim(), {
+          url: `${window.location.origin}/reset-password`,
+          handleCodeInApp: true,
         });
-        if (authError) throw authError;
         setNotice('Jika email terdaftar, tautan pemulihan akan dikirim. Silakan periksa kotak masuk Anda.');
         return;
       }
 
-      const { error: authError } = await supabase.auth.updateUser({ password });
-      if (authError) throw authError;
-      const { error: signOutError } = await supabase.auth.signOut();
-      if (signOutError) throw signOutError;
+      if (!resetCode) throw new Error('Tautan reset kata sandi tidak valid atau sudah kedaluwarsa.');
+      await confirmPasswordReset(auth, resetCode, password);
       navigate('/login', {
         replace: true,
         state: { notice: 'Kata sandi berhasil diperbarui. Silakan login kembali menggunakan kata sandi baru.' },
       });
     } catch (caught) {
       const authError = caught instanceof Error ? caught : new Error('Terjadi kesalahan autentikasi.');
-      setError(errorMessage(authError));
+      let message = errorMessage(authError);
+      if (isLogin) {
+        clearProfile();
+        if (auth.currentUser) {
+          try {
+            await signOut(auth);
+          } catch (cleanupError) {
+            console.error('Gagal membersihkan sesi Firebase setelah login gagal:', cleanupError);
+            message += ' Sesi lama belum dapat dibersihkan, tetapi Anda dapat mencoba login kembali.';
+          }
+        }
+      }
+      setError(message);
     } finally {
       setBusy(false);
     }
   };
 
   const signInWithGoogle = async () => {
-    if (!supabase) {
+    if (!auth) {
       setError('Layanan autentikasi belum dikonfigurasi. Hubungi administrator website.');
       return;
     }
@@ -221,16 +270,13 @@ export function AuthPage() {
     setBusy(true);
     try {
       setRememberSession(remember);
-      const { error: authError } = await supabase.auth.signInWithOAuth({
-        provider: 'google',
-        options: {
-          redirectTo: `${window.location.origin}/login?next=${encodeURIComponent(returnTo)}`,
-        },
-      });
-      if (authError) throw authError;
+      await applySessionPersistence();
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      navigate(returnTo, { replace: true });
     } catch (caught) {
       const authError = caught instanceof Error ? caught : new Error('Google Sign-In gagal dimulai.');
       setError(errorMessage(authError));
+    } finally {
       setBusy(false);
     }
   };
@@ -239,16 +285,21 @@ export function AuthPage() {
     return <main className="auth-page"><div className="auth-loading">Memulihkan sesi...</div></main>;
   }
 
-  if (isReset && !profile && status === 'ready') {
+  if (isReset && !resetCodeValid) {
     return (
       <main className="auth-page">
         <section className="auth-card">
           <Brand />
           <div className="auth-heading">
-            <h1>Tautan tidak tersedia</h1>
-            <p>Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.</p>
+            <h1>{resetCode && isFirebaseConfigured ? 'Memeriksa tautan reset...' : 'Tautan tidak tersedia'}</h1>
+            <p>{!isFirebaseConfigured
+              ? 'Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.'
+              : resetCode
+                ? 'Tautan pemulihan sedang diperiksa.'
+                : 'Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.'}</p>
           </div>
-          <Link className="auth-secondary-button" to="/forgot-password">Minta tautan baru</Link>
+          {error && <div className="auth-message auth-message-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
+          {!resetCode && isFirebaseConfigured && <Link className="auth-secondary-button" to="/forgot-password">Minta tautan baru</Link>}
           <BackToLogin />
         </section>
       </main>
@@ -287,10 +338,10 @@ export function AuthPage() {
           )}
         </div>
 
-        {!isSupabaseConfigured && (
+        {!isFirebaseConfigured && (
           <div className="auth-message auth-message-error" role="alert">
             <AlertCircle size={18} aria-hidden="true" />
-            <span>Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Supabase pada file environment.</span>
+            <span>Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.</span>
           </div>
         )}
         {(notice || routeNotice) && (
@@ -308,7 +359,7 @@ export function AuthPage() {
 
         {isLogin && (
           <>
-            <button type="button" className="auth-google-button" onClick={() => void signInWithGoogle()} disabled={busy || !isSupabaseConfigured}>
+            <button type="button" className="auth-google-button" onClick={() => void signInWithGoogle()} disabled={busy || !isFirebaseConfigured}>
               <GoogleMark />
               <span>Login dengan Google</span>
             </button>
@@ -400,8 +451,8 @@ export function AuthPage() {
             </div>
           )}
 
-          <button type="submit" className="auth-primary-button" disabled={busy || !isSupabaseConfigured}>
-            {busy ? 'Memproses...' : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Kode Verifikasi' : 'Simpan Kata Sandi'}
+          <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured}>
+            {busy ? 'Memproses...' : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
           </button>
         </form>
 

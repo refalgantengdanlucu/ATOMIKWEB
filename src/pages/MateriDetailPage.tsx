@@ -38,7 +38,7 @@ export function MateriDetailPage() {
   const isTeacher = profile?.role === 'teacher';
   const topicUnlocked =
     isTeacher ||
-    (topicId === 't1' && isTopicUnlocked(topicId as TopicId, visited));
+    isTopicUnlocked(topicId as TopicId, visited);
 
   // --- Tentukan bagian aktif ---
   const requestedSectionId = searchParams.get('s');
