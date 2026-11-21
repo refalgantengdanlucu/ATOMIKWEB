@@ -1,0 +1,161 @@
+import {
+  collection,
+  doc,
+  onSnapshot,
+  serverTimestamp,
+  setDoc,
+  type Timestamp,
+} from 'firebase/firestore';
+import { auth, db } from '../lib/firebase';
+import type { TopicId } from '../types';
+
+export type AttemptType = 'diagnostic' | 'practice' | 'unknown';
+
+export interface TeacherQuizAttempt {
+  id: string;
+  uid: string | null;
+  alias: string;
+  moduleId: string | null;
+  activityName: string;
+  attemptType: AttemptType;
+  questionVersion: string | null;
+  score: number | null;
+  maxScore: number | null;
+  percent: number | null;
+  answers: Record<string, string> | null;
+  serverReceivedAt: Date | null;
+}
+
+export interface AttemptFeed {
+  status: 'loading' | 'empty' | 'ready' | 'error';
+  attempts: TeacherQuizAttempt[];
+  updatedAt: Date | null;
+  error?: string;
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+function normalizeAnswers(value: unknown): Record<string, string> | null {
+  if (!isRecord(value)) return null;
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+  );
+}
+
+function normalizeServerTime(value: unknown): Date | null {
+  if (value && typeof value === 'object' && 'toDate' in value) {
+    const toDate = (value as Timestamp).toDate;
+    if (typeof toDate === 'function') {
+      const date = toDate.call(value);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+  }
+  return null;
+}
+
+function normalizeAttempt(id: string, value: Record<string, unknown>): TeacherQuizAttempt {
+  const attemptType = value.attemptType === 'diagnostic' || value.attemptType === 'practice'
+    ? value.attemptType
+    : 'unknown';
+
+  return {
+    id,
+    uid: typeof value.uid === 'string' ? value.uid : null,
+    alias: typeof value.alias === 'string'
+      ? value.alias
+      : typeof value.uid === 'string'
+        ? `Siswa-${value.uid.slice(0, 6)}`
+        : 'Siswa tanpa alias',
+    moduleId: typeof value.moduleId === 'string' ? value.moduleId : null,
+    activityName: typeof value.activityName === 'string'
+      ? value.activityName
+      : typeof value.quizTitle === 'string'
+        ? value.quizTitle
+        : 'Aktivitas tidak diketahui',
+    attemptType,
+    questionVersion: typeof value.questionVersion === 'string' ? value.questionVersion : null,
+    score: typeof value.score === 'number' && Number.isFinite(value.score) ? value.score : null,
+    maxScore: typeof value.maxScore === 'number' && Number.isFinite(value.maxScore) ? value.maxScore : null,
+    percent: typeof value.percent === 'number' && Number.isFinite(value.percent) ? value.percent : null,
+    answers: normalizeAnswers(value.answers),
+    serverReceivedAt: normalizeServerTime(value.serverReceivedAt),
+  };
+}
+
+export function subscribeAcceptedAttempts(onChange: (feed: AttemptFeed) => void): () => void {
+  if (!db) {
+    onChange({
+      status: 'error',
+      attempts: [],
+      updatedAt: null,
+      error: 'Firestore belum dikonfigurasi.',
+    });
+    return () => {};
+  }
+
+  onChange({ status: 'loading', attempts: [], updatedAt: null });
+  return onSnapshot(
+    collection(db, 'quiz_attempts'),
+    { includeMetadataChanges: true },
+    (snapshot) => {
+      if (snapshot.metadata.fromCache) return;
+
+      const attempts = snapshot.docs
+        .filter((document) => !document.metadata.hasPendingWrites)
+        .map((document) => normalizeAttempt(document.id, document.data()));
+
+      onChange({
+        status: attempts.length > 0 ? 'ready' : 'empty',
+        attempts,
+        updatedAt: new Date(),
+      });
+    },
+    (error) => {
+      console.error('Gagal memuat hasil kuis Panel Guru:', error);
+      onChange({
+        status: 'error',
+        attempts: [],
+        updatedAt: null,
+        error: 'Hasil kuis gagal dimuat. Periksa koneksi dan aturan akses Firestore.',
+      });
+    }
+  );
+}
+
+export async function saveTopicQuizAttempt({
+  moduleId,
+  activityName,
+  answers,
+  score,
+  maxScore,
+  percent,
+}: {
+  moduleId: TopicId;
+  activityName: string;
+  answers: Record<string, string>;
+  score: number;
+  maxScore: number;
+  percent: number;
+}): Promise<void> {
+  const user = auth?.currentUser;
+  if (!db || !user) throw new Error('Sesi Firebase diperlukan untuk mengirim hasil kuis.');
+
+  const attemptRef = doc(collection(db, 'quiz_attempts'));
+  await setDoc(attemptRef, {
+    id: attemptRef.id,
+    uid: user.uid,
+    alias: `Siswa-${user.uid.slice(0, 6)}`,
+    moduleId,
+    activityName,
+    attemptType: 'practice',
+    questionVersion: 'v1',
+    answers,
+    score,
+    maxScore,
+    percent,
+    submittedAt: new Date().toISOString(),
+    serverReceivedAt: serverTimestamp(),
+  });
+}

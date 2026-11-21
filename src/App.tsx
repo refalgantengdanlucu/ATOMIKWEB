@@ -13,6 +13,7 @@ import { ProgressPage } from './pages/ProgressPage';
 import { ClassroomToolsPage } from './pages/ClassroomToolsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthPage } from './pages/AuthPage';
+import { PanelGuruRoute } from './panel-guru/PanelGuruRoute';
 
 // Sinkronisasi rute jika pengguna membuka URL berformat hash (#/materi)
 function RouteHashSync() {
@@ -37,6 +38,7 @@ export default function App() {
           <Route path="/register" element={<AuthPage />} />
           <Route path="/forgot-password" element={<AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
+          <Route path="/panel-guru/*" element={<PanelGuruRoute />} />
           <Route path="/*" element={<ProtectedApp />} />
         </Routes>
       </AccessProvider>

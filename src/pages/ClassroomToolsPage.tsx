@@ -295,7 +295,10 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
         maxScore: 10,
         percent: Math.round((score / 10) * 100),
       };
-      void saveQuizAttempt(tracked);
+      void saveQuizAttempt(tracked).catch((error: unknown) => {
+        console.error('Gagal mengirim hasil kegiatan kelas ke Firestore:', error);
+        setSyncMessage('Nilai tersimpan di browser, tetapi pengiriman hasil ke Firebase gagal.');
+      });
       void sendQuizToSheets(attempt, className).then((result) => {
         setSyncMessage(
           result === 'sent'

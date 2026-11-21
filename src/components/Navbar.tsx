@@ -1,8 +1,9 @@
 import { NavLink, useLocation, Link } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 import { useProgress } from '../lib/progress';
+import { useTeacherAccess } from '../panel-guru/useTeacherAccess';
 interface NavItem {
   to: string;
   label: string;
@@ -28,7 +29,11 @@ export function Navbar() {
   const location = useLocation();
   const { profile, exit } = useAccess();
   const { isLaboratoryUnlocked, areQuizzesUnlocked } = useProgress();
+  const teacherAccess = useTeacherAccess();
   const [logoutError, setLogoutError] = useState('');
+  const navItems = teacherAccess === 'allowed'
+    ? [...NAV_ITEMS, { to: '/panel-guru', label: 'Panel Guru', icon: GraduationCap }]
+    : NAV_ITEMS;
 
   const handleExit = async () => {
     setLogoutError('');
@@ -102,7 +107,7 @@ export function Navbar() {
             aria-label="Navigasi Utama Desktop"
             className="hidden md:flex items-center gap-1.5"
           >
-            {NAV_ITEMS.map((item) => {
+            {navItems.map((item) => {
               const Icon = item.icon;
               const active = checkIsActive(item);
               const isLocked = profile?.role === 'student' && (
@@ -177,9 +182,9 @@ export function Navbar() {
         {/* Mobile Nav Bar (TETAP DI ATAS LAYAR, tidak disembunyikan, scrollable horizontal) */}
         <nav
           aria-label="Navigasi Utama Ponsel Atas"
-          className="md:hidden flex items-center gap-1.5 overflow-x-auto py-2 border-t border-[#F1E5D8]/60 no-scrollbar"
+          className="md:hidden flex flex-wrap items-center gap-1.5 py-2 border-t border-[#F1E5D8]/60"
         >
-          {NAV_ITEMS.map((item) => {
+          {navItems.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
             const isLocked = profile?.role === 'student' && (

@@ -7,8 +7,9 @@ import {
   query,
   orderBy,
   limit,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
+import { auth, db, isFirebaseConfigured } from './firebase';
 import type {
   AttendanceRecord,
   PollResponse,
@@ -101,9 +102,28 @@ export function subscribeStudentActivities(
  * Menyimpan hasil pengerjaan kuis ke koleksi 'quiz_attempts'.
  */
 export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const attemptRef = doc(db, 'quiz_attempts', attempt.id);
-  await setDoc(attemptRef, attempt, { merge: true });
+  if (!db || !isFirebaseConfigured) throw new Error('Firestore belum dikonfigurasi untuk menyimpan hasil kuis.');
+  const user = auth?.currentUser;
+  if (!user) throw new Error('Sesi Firebase diperlukan untuk menyimpan hasil kuis.');
+
+  const attemptRef = doc(collection(db, 'quiz_attempts'));
+  await setDoc(attemptRef, {
+    id: attemptRef.id,
+    uid: user.uid,
+    alias: `Siswa-${user.uid.slice(0, 6)}`,
+    className: attempt.className,
+    quizTitle: attempt.quizTitle,
+    activityName: attempt.quizTitle,
+    moduleId: 'classroom',
+    attemptType: 'practice',
+    questionVersion: 'unversioned',
+    answers: {},
+    score: attempt.score,
+    maxScore: attempt.maxScore,
+    percent: attempt.percent,
+    submittedAt: attempt.submittedAt,
+    serverReceivedAt: serverTimestamp(),
+  });
 }
 
 /**

@@ -3,8 +3,8 @@ import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
-import { saveQuizAttempt } from '../lib/firebase-db';
 import { getProgress, saveProgress } from '../lib/progress';
+import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send } from 'lucide-react';
 
@@ -12,6 +12,8 @@ interface SavedQuizSession {
   answers: Record<string, string>;
   submitted: boolean;
 }
+
+type SubmissionSyncStatus = 'idle' | 'pending' | 'saved' | 'failed';
 
 function quizStorageKey(topicId: TopicId) {
   return `atomika-quiz-${topicId}-v1`;
@@ -76,6 +78,7 @@ function QuizSession({ topic }: { topic: Topic }) {
   const questions = QUIZ_QUESTIONS[topic.id];
   const [session, setSession] = useState(() => readQuizSession(topic.id));
   const [storageAvailable, setStorageAvailable] = useState(true);
+  const [submissionSyncStatus, setSubmissionSyncStatus] = useState<SubmissionSyncStatus>('idle');
   const answeredCount = questions.filter((question) => session.answers[question.id]).length;
   const correctCount = questions.filter(
     (question) => session.answers[question.id] === question.correct
@@ -100,16 +103,20 @@ function QuizSession({ topic }: { topic: Topic }) {
 
     const score = Math.round((correctCount / questions.length) * 100);
 
-    if (profile) {
-      void saveQuizAttempt({
-        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-        name: profile.name,
-        className: profile.role === 'student' ? profile.className : '',
-        quizTitle: topic.title,
+    if (profile?.role === 'student') {
+      setSubmissionSyncStatus('pending');
+      void saveTopicQuizAttempt({
+        moduleId: topic.id,
+        activityName: `Kuis pemahaman materi · ${topic.title}`,
+        answers: session.answers,
         score: correctCount,
         maxScore: questions.length,
         percent: score,
-        submittedAt: new Date().toISOString(),
+      }).then(() => {
+        setSubmissionSyncStatus('saved');
+      }).catch((error: unknown) => {
+        console.error('Gagal mengirim hasil kuis ke Firestore:', error);
+        setSubmissionSyncStatus('failed');
       });
     }
 
@@ -132,6 +139,7 @@ function QuizSession({ topic }: { topic: Topic }) {
   const restartQuiz = () => {
     const freshSession = { answers: {}, submitted: false };
     setSession(freshSession);
+    setSubmissionSyncStatus('idle');
     setStorageAvailable(writeQuizSession(topic.id, freshSession));
   };
 
@@ -167,6 +175,14 @@ function QuizSession({ topic }: { topic: Topic }) {
               {correctCount} dari {questions.length} benar · Nilai {Math.round((correctCount / questions.length) * 100)}%
             </p>
             <p className="mt-1 text-xs text-green-800">Jawaban benar, jawabanmu, dan pembahasan tersedia di setiap soal.</p>
+            {profile?.role === 'student' && (
+              <p role="status" className="mt-2 text-xs font-semibold text-green-900">
+                {submissionSyncStatus === 'pending' && 'Mengirim hasil ke server; hasil belum masuk rekap guru.'}
+                {submissionSyncStatus === 'saved' && 'Hasil berhasil diterima server.'}
+                {submissionSyncStatus === 'failed' && 'Hasil hanya tersimpan di perangkat ini; pengiriman ke server gagal.'}
+                {submissionSyncStatus === 'idle' && 'Progres lokal tersimpan di perangkat ini.'}
+              </p>
+            )}
           </div>
           <button type="button" onClick={restartQuiz} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#C2410C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#9A3412]">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
