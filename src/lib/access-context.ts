@@ -4,10 +4,13 @@ export type AccessProfile =
   | { role: 'student'; name: string; className: string }
   | { role: 'teacher'; name: string };
 
+export type AuthStatus = 'loading' | 'ready';
+
 export interface AccessContextValue {
   profile: AccessProfile | null;
+  status: AuthStatus;
   enter: (profile: AccessProfile) => void;
-  exit: () => void;
+  exit: () => Promise<void>;
 }
 
 export const AccessContext = createContext<AccessContextValue | null>(null);

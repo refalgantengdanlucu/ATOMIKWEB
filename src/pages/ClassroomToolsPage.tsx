@@ -7,35 +7,60 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  EyeOff,
+  KeyRound,
   RotateCw,
   Users,
 } from 'lucide-react';
+import { updateTeacherPassword } from '../lib/teacher-auth';
 import {
+  ATOM_QUESTIONS,
   CLASSROOM_STORAGE_KEYS,
   getLocalDateKey,
   normalizeStudentName,
   POLL_OPTIONS,
   POLL_PROMPT,
   PROGRESS_STAGES,
-  REACTION_QUESTIONS,
-  REACTION_TYPES,
   readClassroomData,
   writeClassroomData,
 } from '../lib/classroom';
-import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress } from '../lib/classroom';
+import type {
+  AttendanceRecord,
+  PollResponse,
+  PollSession,
+  QuizAttempt,
+  StudentActivity,
+  StudentProgress,
+} from '../lib/classroom';
 import { useAccess } from '../lib/access-context';
 import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
 import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
+import {
+  saveAttendance,
+  savePollResponse,
+  saveQuizAttempt,
+  saveStudentProgress,
+  subscribeAllAttendance,
+  subscribePollResponses,
+  subscribeQuizAttempts,
+  subscribeStudentActivities,
+  subscribeStudentProgress,
+} from '../lib/firebase-db';
 
-type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity';
+type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity' | 'settings';
 
 const TABS: { id: ActivityTab; title: string; description: string; icon: typeof Activity }[] = [
-  { id: 'quiz', title: 'Kuis Reaksi', description: '10 soal klasifikasi reaksi', icon: ClipboardList },
+  { id: 'quiz', title: 'Kuis Struktur Atom', description: '10 soal (Mudah, Sedang, Sukar)', icon: ClipboardList },
   { id: 'poll', title: 'Cek Pemahaman Live', description: 'Polling cepat kelas', icon: BarChart3 },
   { id: 'attendance', title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
   { id: 'progress', title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
 ];
-const TEACHER_TABS = [...TABS, { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users }];
+const TEACHER_TABS = [
+  ...TABS,
+  { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users },
+  { id: 'settings' as const, title: 'Sandi Guru', description: 'Pengaturan sandi khusus guru', icon: KeyRound },
+];
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-8';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:opacity-50';
@@ -86,7 +111,7 @@ function mergeQuizResults(local: QuizAttempt[], remote: TrackedQuizResult[]): Tr
       ...result,
       submittedAt,
       className: result.className ?? '',
-      quizTitle: result.quizTitle ?? 'Klasifikasi Jenis Reaksi Kimia',
+      quizTitle: result.quizTitle ?? 'Kuis Struktur Atom (Fase E)',
       maxScore: 'maxScore' in result && typeof result.maxScore === 'number' ? result.maxScore : 10,
       percent: 'percent' in result && typeof result.percent === 'number' ? result.percent : Math.round((result.score / 10) * 100),
     };
@@ -94,6 +119,20 @@ function mergeQuizResults(local: QuizAttempt[], remote: TrackedQuizResult[]): Tr
     results.set(key, normalized);
   }
   return [...results.values()].sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt));
+}
+
+function mergeAttendanceRecords(local: AttendanceRecord[], remote: AttendanceRecord[]): AttendanceRecord[] {
+  const records = new Map<string, AttendanceRecord>();
+  for (const record of [...local, ...remote]) {
+    const key = `${record.date}|${normalizeStudentName(record.name)}`;
+    const existing = records.get(key);
+    if (!existing || Date.parse(record.checkedInAt) > Date.parse(existing.checkedInAt)) {
+      records.set(key, record);
+    }
+  }
+  return [...records.values()].sort(
+    (a, b) => b.date.localeCompare(a.date) || b.checkedInAt.localeCompare(a.checkedInAt)
+  );
 }
 
 function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
@@ -116,7 +155,7 @@ function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'hasil-kuis-atomika.csv';
+  link.download = 'hasil-kuis-struktur-atom.csv';
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -179,11 +218,6 @@ export function ClassroomToolsPage() {
   const studentProgress = readClassroomData<StudentProgress[]>(CLASSROOM_STORAGE_KEYS.progress, []);
   const activityRecords = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
 
-  const newestAttendanceDay = attendanceRecords.reduce(
-    (latest, record) => (record.date > latest ? record.date : latest),
-    '',
-  );
-  const latestDayCount = attendanceRecords.filter((record) => record.date === newestAttendanceDay).length;
   const groupedAttendance = [...attendanceRecords].sort((a, b) =>
     b.date.localeCompare(a.date) || b.checkedInAt.localeCompare(a.checkedInAt),
   );
@@ -223,8 +257,6 @@ export function ClassroomToolsPage() {
           attempts={quizAttempts}
           pollSession={pollSession}
           attendanceRecords={groupedAttendance}
-          newestAttendanceDay={newestAttendanceDay}
-          latestDayCount={latestDayCount}
           progress={orderedProgress}
           activities={activityRecords}
           refreshVersion={refreshKey}
@@ -247,7 +279,7 @@ export function ClassroomToolsPage() {
             ))}
           </div>
 
-          {activeTab === 'quiz' && <ReactionQuiz key={profile.name} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
+          {activeTab === 'quiz' && <AtomQuiz key={profile.name} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
           {activeTab === 'poll' && <StudentPoll key={pollSession.id} onSave={save} pollSession={pollSession} />}
           {activeTab === 'attendance' && <StudentAttendance key={profile.name} initialName={profile.name} onSave={save} records={attendanceRecords} />}
           {activeTab === 'progress' && <StudentTaskProgress key={`${profile.name}|${profile.className}`} initialName={profile.name} className={profile.className} onSave={save} progress={studentProgress} />}
@@ -257,7 +289,7 @@ export function ClassroomToolsPage() {
   );
 }
 
-function ReactionQuiz({ initialName, className, onSave, attempts }: { initialName: string; className: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
+function AtomQuiz({ initialName, className, onSave, attempts }: { initialName: string; className: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
   const [name] = useState(initialName);
   const [questionIndex, setQuestionIndex] = useState(-1);
   const [selected, setSelected] = useState<string | null>(null);
@@ -265,7 +297,7 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
   const [finished, setFinished] = useState(false);
   const [savedScore, setSavedScore] = useState<number | null>(null);
   const [syncMessage, setSyncMessage] = useState('');
-  const question = REACTION_QUESTIONS[questionIndex];
+  const question = ATOM_QUESTIONS[questionIndex];
 
   const finishQuiz = (nextAnswers: boolean[]) => {
     const score = nextAnswers.filter(Boolean).length;
@@ -273,20 +305,28 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
       name: name.trim().replace(/\s+/g, ' '),
       className,
-      quizTitle: 'Klasifikasi Jenis Reaksi Kimia',
+      quizTitle: 'Kuis Struktur Atom (Fase E)',
       score,
       submittedAt: new Date().toISOString(),
     };
     if (onSave(CLASSROOM_STORAGE_KEYS.quiz, [...attempts, attempt])) {
       setSavedScore(score);
       setFinished(true);
+      const tracked: TrackedQuizResult = {
+        ...attempt,
+        className,
+        quizTitle: 'Kuis Struktur Atom (Fase E)',
+        maxScore: 10,
+        percent: Math.round((score / 10) * 100),
+      };
+      void saveQuizAttempt(tracked);
       void sendQuizToSheets(attempt, className).then((result) => {
         setSyncMessage(
           result === 'sent'
-            ? 'Permintaan sinkronisasi Google Sheets terkirim. Pastikan hasil muncul di spreadsheet.'
+            ? 'Permintaan sinkronisasi Google Sheets terkirim. Nilai berhasil dicatat.'
             : result === 'failed'
-              ? 'Nilai tersimpan di browser, tetapi pengiriman ke Google Sheets gagal.'
-              : 'Nilai tersimpan di browser. Sinkronisasi Google Sheets belum diaktifkan.',
+              ? 'Nilai tersimpan di browser & database, sinkronisasi spreadsheet gagal.'
+              : 'Nilai tersimpan di browser dan database.',
         );
       });
     }
@@ -295,12 +335,31 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
   if (finished) {
     return (
       <section className={`${panelClass} mx-auto max-w-2xl text-center`}>
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700"><CheckCircle2 className="h-7 w-7" aria-hidden="true" /></div>
+        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700">
+          <CheckCircle2 className="h-7 w-7" aria-hidden="true" />
+        </div>
         <p className="text-sm font-semibold text-[#64748B]">Kuis selesai, {name.trim()}!</p>
-        <h2 className="mt-1 text-4xl font-black text-[#172033]">{savedScore ?? 0}<span className="text-xl text-[#64748B]"> / 10</span></h2>
-        <p className="mt-2 text-sm text-[#475569]">Ini adalah hasil kuismu. Hanya kamu yang melihat skor di halaman ini.</p>
+        <h2 className="mt-1 text-4xl font-black text-[#172033]">
+          {savedScore ?? 0}
+          <span className="text-xl text-[#64748B]"> / {ATOM_QUESTIONS.length}</span>
+        </h2>
+        <p className="mt-2 text-sm text-[#475569]">
+          Nilai kuis Struktur Atom kamu telah otomatis tercatat dan dapat dilihat oleh guru di rekap kelas.
+        </p>
         <p role="status" className="mt-3 text-xs text-[#64748B]">{syncMessage || 'Menyimpan hasil kuis...'}</p>
-        <button type="button" className={`${buttonClass} mt-6`} onClick={() => { setQuestionIndex(-1); setSelected(null); setAnswers([]); setFinished(false); setSavedScore(null); }}>Selesai</button>
+        <button
+          type="button"
+          className={`${buttonClass} mt-6`}
+          onClick={() => {
+            setQuestionIndex(-1);
+            setSelected(null);
+            setAnswers([]);
+            setFinished(false);
+            setSavedScore(null);
+          }}
+        >
+          Ulangi Kuis
+        </button>
       </section>
     );
   }
@@ -308,45 +367,148 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
   if (questionIndex === -1) {
     return (
       <section className={`${panelClass} mx-auto max-w-2xl`}>
-        <p className="text-xs font-bold uppercase tracking-wider text-[#C2410C]">Kuis klasifikasi reaksi · 10 soal</p>
-        <h2 className="mt-2 text-2xl font-extrabold text-[#172033]">Kenali pola reaksinya</h2>
-        <p className="mt-2 text-sm leading-6 text-[#475569]">Pilih jenis reaksi yang paling sesuai. Setiap jawaban mendapat umpan balik langsung.</p>
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-bold text-[#C2410C]">
+            Kuis Struktur Atom
+          </span>
+          <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-[#475569]">
+            {ATOM_QUESTIONS.length} Soal
+          </span>
+        </div>
+        <h2 className="mt-3 text-2xl font-extrabold text-[#172033]">
+          Uji Pemahaman Materi Struktur Atom
+        </h2>
+        <p className="mt-2 text-sm leading-6 text-[#475569]">
+          Soal disusun bertahap dengan 3 tingkat kesulitan:{' '}
+          <span className="font-bold text-emerald-700">Mudah</span> (partikel & model dasar),{' '}
+          <span className="font-bold text-amber-700">Sedang</span> (notasi atom, ion, konfigurasi Bohr), hingga{' '}
+          <span className="font-bold text-rose-700">Sukar</span> (konfigurasi Aufbau & Aturan Hund).
+        </p>
         <div className="mt-6 space-y-4">
-          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">Nama peserta: <strong className="text-[#172033]">{name}</strong></p>
-          <button type="button" className={buttonClass} onClick={() => setQuestionIndex(0)}>Mulai kuis</button>
+          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">
+            Nama peserta: <strong className="text-[#172033]">{name}</strong> {className && `(${className})`}
+          </p>
+          <button type="button" className={buttonClass} onClick={() => setQuestionIndex(0)}>
+            Mulai Kuis Sekarang
+          </button>
         </div>
       </section>
     );
   }
 
   const isCorrect = selected === question.correct;
+  const difficultyBadge =
+    question.difficulty === 'Mudah'
+      ? 'bg-emerald-50 text-emerald-800 border-emerald-300'
+      : question.difficulty === 'Sedang'
+        ? 'bg-amber-50 text-amber-800 border-amber-300'
+        : 'bg-rose-50 text-rose-800 border-rose-300';
+
   return (
     <section className={`${panelClass} mx-auto max-w-2xl`}>
       <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-[#C2410C]">Soal {questionIndex + 1} dari 10</p>
-        <span className="text-xs font-semibold text-[#64748B]">{answers.filter(Boolean).length} benar sejauh ini</span>
+        <div className="flex items-center gap-2">
+          <p className="text-xs font-bold uppercase tracking-wider text-[#C2410C]">
+            Soal {questionIndex + 1} dari {ATOM_QUESTIONS.length}
+          </p>
+          <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-[11px] font-bold border ${difficultyBadge}`}>
+            Tingkat: {question.difficulty}
+          </span>
+        </div>
+        <span className="text-xs font-semibold text-[#64748B]">
+          {answers.filter(Boolean).length} benar sejauh ini
+        </span>
       </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100"><div className="h-full rounded-full bg-[#F97316] transition-all" style={{ width: `${((questionIndex + 1) / REACTION_QUESTIONS.length) * 100}%` }} /></div>
-      <h2 className="mt-7 text-lg font-bold text-[#172033]">Klasifikasikan persamaan reaksi berikut:</h2>
-      <p className="my-5 rounded-2xl bg-[#FFF8F0] px-4 py-6 text-center font-mono text-lg font-bold text-[#172033] sm:text-2xl">{question.equation}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {REACTION_TYPES.map((type) => (
-          <button type="button" key={type} disabled={selected !== null} onClick={() => { setSelected(type); setAnswers((current) => [...current, type === question.correct]); }} className={`min-h-12 rounded-xl border px-4 py-3 text-left text-sm font-semibold transition-colors ${selected === type ? (type === question.correct ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800') : selected && type === question.correct ? 'border-green-500 bg-green-50 text-green-800' : 'border-[#F1E5D8] hover:border-orange-300 hover:bg-orange-50'}`}>
-            {type}
-          </button>
-        ))}
+
+      <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100">
+        <div
+          className="h-full rounded-full bg-[#F97316] transition-all"
+          style={{ width: `${((questionIndex + 1) / ATOM_QUESTIONS.length) * 100}%` }}
+        />
       </div>
-      {selected && (
-        <div role="status" className={`mt-4 rounded-xl p-4 text-sm leading-6 ${isCorrect ? 'bg-green-50 text-green-900' : 'bg-amber-50 text-amber-950'}`}>
-          <strong>{isCorrect ? 'Tepat!' : `Belum tepat. Jawabannya: ${question.correct}.`}</strong> {question.explanation}
-          <button type="button" className={`${buttonClass} mt-4`} onClick={() => {
-            if (questionIndex === REACTION_QUESTIONS.length - 1) {
-              finishQuiz(answers);
+
+      <h2 className="mt-6 text-lg font-bold leading-relaxed text-[#172033]">
+        {question.question}
+      </h2>
+
+      <div className="mt-5 space-y-2.5">
+        {question.options.map((option, optIdx) => {
+          const letter = String.fromCharCode(65 + optIdx);
+          const isThisSelected = selected === option;
+          const isThisCorrect = option === question.correct;
+
+          let btnClass = 'border-[#F1E5D8] bg-white hover:border-orange-300 hover:bg-orange-50/60 text-[#172033]';
+          if (selected) {
+            if (isThisCorrect) {
+              btnClass = 'border-green-500 bg-green-50 text-green-900 font-bold';
+            } else if (isThisSelected) {
+              btnClass = 'border-red-400 bg-red-50 text-red-900';
             } else {
-              setQuestionIndex((current) => current + 1);
-              setSelected(null);
+              btnClass = 'border-[#F1E5D8] bg-slate-50/60 text-slate-400 opacity-60';
             }
-          }}>{questionIndex === REACTION_QUESTIONS.length - 1 ? 'Lihat skor saya' : 'Soal berikutnya'}</button>
+          }
+
+          return (
+            <button
+              type="button"
+              key={option}
+              disabled={selected !== null}
+              onClick={() => {
+                setSelected(option);
+                setAnswers((current) => [...current, option === question.correct]);
+              }}
+              className={`flex w-full min-h-12 items-center gap-3 rounded-xl border px-4 py-3 text-left text-sm font-medium transition-all ${btnClass}`}
+            >
+              <span
+                className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-lg text-xs font-bold ${
+                  selected && isThisCorrect
+                    ? 'bg-green-600 text-white'
+                    : selected && isThisSelected
+                      ? 'bg-red-600 text-white'
+                      : 'bg-orange-100 text-[#C2410C]'
+                }`}
+              >
+                {letter}
+              </span>
+              <span className="flex-1 leading-snug">{option}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {selected && (
+        <div
+          role="status"
+          className={`mt-5 rounded-2xl p-4 text-sm leading-6 border ${
+            isCorrect
+              ? 'border-green-200 bg-green-50 text-green-950'
+              : 'border-amber-200 bg-amber-50 text-amber-950'
+          }`}
+        >
+          <div className="flex items-center gap-2 font-bold mb-1">
+            {isCorrect ? (
+              <span className="text-green-800">✓ Tepat sekali!</span>
+            ) : (
+              <span className="text-amber-900">
+                ✕ Belum tepat. Jawaban yang benar: <strong>{question.correct}</strong>
+              </span>
+            )}
+          </div>
+          <p className="text-xs sm:text-sm text-[#475569]">{question.explanation}</p>
+          <button
+            type="button"
+            className={`${buttonClass} mt-4`}
+            onClick={() => {
+              if (questionIndex === ATOM_QUESTIONS.length - 1) {
+                finishQuiz(answers);
+              } else {
+                setQuestionIndex((current) => current + 1);
+                setSelected(null);
+              }
+            }}
+          >
+            {questionIndex === ATOM_QUESTIONS.length - 1 ? 'Lihat Skor Saya' : 'Soal Berikutnya'}
+          </button>
         </div>
       )}
     </section>
@@ -371,6 +533,7 @@ function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unk
     if (choice === null) return;
     const response = { id: crypto.randomUUID(), optionIndex: choice, submittedAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.poll, { ...pollSession, responses: [...pollSession.responses, response] })) {
+      void savePollResponse(pollSession.id, response);
       try {
         window.localStorage.setItem(submittedKey, 'true');
         setSubmittedSessionId(pollSession.id);
@@ -421,6 +584,7 @@ function StudentAttendance({ initialName, onSave, records }: { initialName: stri
     }
     const record = { name: name.trim().replace(/\s+/g, ' '), date: today, checkedInAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.attendance, [...records, record])) {
+      void saveAttendance(record);
       setConfirmation({ name: record.name, time: record.checkedInAt, duplicate: false });
     }
   };
@@ -477,6 +641,7 @@ function StudentTaskProgress({ initialName, className, onSave, progress }: { ini
     if (onSave(CLASSROOM_STORAGE_KEYS.progress, nextRoster)) {
       setCompletedStages(nextStages);
       setSaveMessage('Progres tersimpan.');
+      void saveStudentProgress(updated);
       void sendProgressToSheets(updated, className).then((result) => {
         setSyncMessage(
           result === 'sent'
@@ -533,8 +698,6 @@ function TeacherDashboard({
   attempts,
   pollSession,
   attendanceRecords,
-  newestAttendanceDay,
-  latestDayCount,
   progress,
   activities,
   refreshVersion,
@@ -546,8 +709,6 @@ function TeacherDashboard({
   attempts: QuizAttempt[];
   pollSession: PollSession;
   attendanceRecords: AttendanceRecord[];
-  newestAttendanceDay: string;
-  latestDayCount: number;
   progress: StudentProgress[];
   activities: StudentActivity[];
   refreshVersion: number;
@@ -556,10 +717,6 @@ function TeacherDashboard({
   const [sheetsData, setSheetsData] = useState<TeacherSheetsData | null>(null);
   const [sheetsError, setSheetsError] = useState('');
   const [sheetsLoading, setSheetsLoading] = useState(false);
-  const answerCounts = POLL_OPTIONS.map((_, optionIndex) =>
-    pollSession.responses.filter((response) => response.optionIndex === optionIndex).length,
-  );
-  const totalResponses = pollSession.responses.length;
 
   const refreshSheets = useCallback(async () => {
     await Promise.resolve();
@@ -590,9 +747,55 @@ function TeacherDashboard({
     };
   }, [activeTab, refreshVersion, refreshSheets]);
 
-  const latestActivities = mergeActivities(activities, sheetsData?.activities ?? []);
-  const allQuizResults = mergeQuizResults(attempts, sheetsData?.quizzes ?? []);
-  const allProgress = mergeStudentProgress(progress, sheetsData?.progress ?? []);
+  const [firebaseActivities, setFirebaseActivities] = useState<StudentActivity[]>([]);
+  const [firebaseQuizzes, setFirebaseQuizzes] = useState<TrackedQuizResult[]>([]);
+  const [firebaseAttendance, setFirebaseAttendance] = useState<AttendanceRecord[]>([]);
+  const [firebaseProgress, setFirebaseProgress] = useState<StudentProgress[]>([]);
+  const [firebasePolls, setFirebasePolls] = useState<PollResponse[]>([]);
+
+  useEffect(() => {
+    const unsubActivities = subscribeStudentActivities((items) => setFirebaseActivities(items));
+    const unsubQuizzes = subscribeQuizAttempts((items) => setFirebaseQuizzes(items));
+    const unsubAttendance = subscribeAllAttendance((items) => setFirebaseAttendance(items));
+    const unsubProgress = subscribeStudentProgress((items) => setFirebaseProgress(items));
+    const unsubPolls = subscribePollResponses(pollSession.id, (items) => setFirebasePolls(items));
+    return () => {
+      unsubActivities();
+      unsubQuizzes();
+      unsubAttendance();
+      unsubProgress();
+      unsubPolls();
+    };
+  }, [pollSession.id]);
+
+  const latestActivities = mergeActivities(
+    mergeActivities(activities, sheetsData?.activities ?? []),
+    firebaseActivities
+  );
+  const allQuizResults = mergeQuizResults(
+    mergeQuizResults(attempts, sheetsData?.quizzes ?? []),
+    firebaseQuizzes
+  );
+  const allAttendance = mergeAttendanceRecords(attendanceRecords, firebaseAttendance);
+  const allProgress = mergeStudentProgress(
+    mergeStudentProgress(progress, sheetsData?.progress ?? []),
+    firebaseProgress
+  );
+
+  const allPollResponses = [
+    ...pollSession.responses,
+    ...firebasePolls.filter((fp) => !pollSession.responses.some((p) => p.id === fp.id)),
+  ];
+  const answerCounts = POLL_OPTIONS.map((_, optionIndex) =>
+    allPollResponses.filter((response) => response.optionIndex === optionIndex).length,
+  );
+  const totalResponses = allPollResponses.length;
+
+  const newestAttendanceDay = allAttendance.reduce(
+    (latest, record) => (record.date > latest ? record.date : latest),
+    '',
+  );
+  const latestDayCount = allAttendance.filter((record) => record.date === newestAttendanceDay).length;
 
   const startNewPoll = () => {
     const newSession: PollSession = { id: crypto.randomUUID(), responses: [] };
@@ -625,7 +828,7 @@ function TeacherDashboard({
       {activeTab === 'quiz' && (
         <div className={panelClass}>
           <div className="mb-5 flex items-center justify-between gap-3">
-            <div><h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3><p className="text-sm text-[#64748B]">{allQuizResults.length} pengerjaan tersimpan · terbaru dahulu {sheetsLoading && '· menyegarkan...'}</p></div>
+            <div><h3 className="text-lg font-bold text-[#172033]">Hasil Kuis Struktur Atom</h3><p className="text-sm text-[#64748B]">{allQuizResults.length} pengerjaan tersimpan · terbaru dahulu {sheetsLoading && '· menyegarkan...'}</p></div>
             <Users className="h-5 w-5 text-[#F97316]" aria-hidden="true" />
           </div>
           {allQuizResults.length ? (
@@ -671,12 +874,12 @@ function TeacherDashboard({
             <div><h3 className="text-lg font-bold text-[#172033]">Rekap presensi</h3><p className="mt-1 text-sm text-[#64748B]">Jumlah hadir pada tanggal terbaru</p></div>
             <p className="rounded-xl bg-green-50 px-4 py-2 text-sm font-bold text-green-900">{latestDayCount} siswa {newestAttendanceDay && `· ${formatDate(newestAttendanceDay)}`}</p>
           </div>
-          {attendanceRecords.length ? (
+          {allAttendance.length ? (
             <div className="mt-5 space-y-5">
-              {Array.from(new Set(attendanceRecords.map((record) => record.date))).sort((a, b) => b.localeCompare(a)).map((date) => (
+              {Array.from(new Set(allAttendance.map((record) => record.date))).sort((a, b) => b.localeCompare(a)).map((date) => (
                 <div key={date}>
                   <h4 className="mb-2 border-b border-[#F1E5D8] pb-2 text-sm font-bold text-[#172033]">{formatDate(date)}</h4>
-                  <ul className="divide-y divide-[#F1E5D8]/70">{attendanceRecords.filter((record) => record.date === date).map((record) => <li key={`${record.date}-${normalizeStudentName(record.name)}`} className="flex justify-between gap-4 py-2.5 text-sm"><span className="font-medium">{record.name}</span><time className="text-[#64748B]">{formatTime(record.checkedInAt)}</time></li>)}</ul>
+                  <ul className="divide-y divide-[#F1E5D8]/70">{allAttendance.filter((record) => record.date === date).map((record) => <li key={`${record.date}-${normalizeStudentName(record.name)}`} className="flex justify-between gap-4 py-2.5 text-sm"><span className="font-medium">{record.name}</span><time className="text-[#64748B]">{formatTime(record.checkedInAt)}</time></li>)}</ul>
                 </div>
               ))}
             </div>
@@ -738,7 +941,114 @@ function TeacherDashboard({
           ) : <EmptyState text="Belum ada aktivitas siswa. Data akan muncul setelah siswa masuk dan membuka materi atau modul." />}
         </div>
       )}
+      {activeTab === 'settings' && (
+        <div className={panelClass}>
+          <TeacherPasswordSettings />
+        </div>
+      )}
     </section>
+  );
+}
+
+function TeacherPasswordSettings() {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+
+    if (newPassword.length < 6) {
+      setErr('Sandi baru minimal 6 karakter.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErr('Konfirmasi sandi tidak sesuai.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateTeacherPassword(newPassword);
+      setMsg('Sandi khusus guru berhasil diperbarui di database! Sandi baru telah aktif.');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      setErr(error?.message || 'Gagal memperbarui sandi guru.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg space-y-5">
+      <div>
+        <h3 className="text-lg font-bold text-[#172033]">Pengaturan Sandi Khusus Guru</h3>
+        <p className="text-sm text-[#64748B]">
+          Perbarui sandi akses guru. Sandi disimpan secara aman dalam bentuk hash salted SHA-256 di database Firestore.
+        </p>
+      </div>
+
+      {msg && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+          {msg}
+        </div>
+      )}
+      {err && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800">
+          {err}
+        </div>
+      )}
+
+      <form onSubmit={handleUpdate} className="space-y-4">
+        <label className="block space-y-1.5 text-xs font-bold text-[#475569]">
+          <span>Sandi Baru Guru</span>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Masukkan sandi baru minimal 6 karakter"
+              required
+              className="min-h-11 w-full rounded-xl border border-[#E8D8C8] bg-white px-3 pr-10 text-sm text-[#172033] outline-none focus:border-[#C2410C]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#172033]"
+              title={showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </label>
+
+        <label className="block space-y-1.5 text-xs font-bold text-[#475569]">
+          <span>Konfirmasi Sandi Baru</span>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Ketik ulang sandi baru"
+            required
+            className="min-h-11 w-full rounded-xl border border-[#E8D8C8] bg-white px-3 text-sm text-[#172033] outline-none focus:border-[#C2410C]"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:opacity-50"
+        >
+          {loading ? 'Menyimpan...' : 'Perbarui Sandi Guru'}
+        </button>
+      </form>
+    </div>
   );
 }
 
