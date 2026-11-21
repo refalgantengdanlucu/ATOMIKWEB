@@ -3,7 +3,7 @@ import type { User as SupabaseUser } from '@supabase/supabase-js';
 import { onAuthStateChanged, signOut as firebaseSignOut, type User as FirebaseUser } from 'firebase/auth';
 import { AccessContext, type AccessProfile, type AccessContextValue } from '../lib/access-context';
 import { auth, isFirebaseConfigured } from '../lib/firebase';
-import { getUserProfile, saveUserProfile, toAccessProfile, type FirebaseUserProfile } from '../lib/firebase-db';
+import { getUserProfile, getUserProfileByEmail, isAuthorizedTeacherEmail, toAccessProfile } from '../lib/firebase-db';
 import { supabase } from '../lib/supabase';
 
 function profileFromSupabaseUser(user: SupabaseUser | null): AccessProfile | null {
@@ -30,8 +30,45 @@ function profileFromSupabaseUser(user: SupabaseUser | null): AccessProfile | nul
   };
 }
 
+const ACCESS_STORAGE_KEY = 'atomika-access-v1';
+
+function readProfile(): AccessProfile | null {
+  try {
+    const raw = window.sessionStorage.getItem(ACCESS_STORAGE_KEY);
+    if (!raw) return null;
+    const profile: unknown = JSON.parse(raw);
+    if (
+      typeof profile === 'object' &&
+      profile !== null &&
+      'role' in profile &&
+      profile.role === 'student' &&
+      'name' in profile &&
+      typeof profile.name === 'string' &&
+      'className' in profile &&
+      typeof profile.className === 'string'
+    ) {
+      return { role: 'student', name: profile.name, className: profile.className };
+    }
+    if (
+      typeof profile === 'object' &&
+      profile !== null &&
+      'role' in profile &&
+      profile.role === 'teacher' &&
+      'name' in profile &&
+      typeof profile.name === 'string'
+    ) {
+      return { role: 'teacher', name: profile.name };
+    }
+    window.sessionStorage.removeItem(ACCESS_STORAGE_KEY);
+    return null;
+  } catch (error) {
+    console.error('Gagal membaca sesi akses ATOMIKA:', error);
+    return null;
+  }
+}
+
 export function AccessProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<AccessProfile | null>(null);
+  const [profile, setProfile] = useState<AccessProfile | null>(readProfile);
   const [status, setStatus] = useState<'loading' | 'ready'>(
     isFirebaseConfigured || Boolean(supabase) ? 'loading' : 'ready'
   );
@@ -44,46 +81,83 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       const unsubscribe = onAuthStateChanged(auth, async (firebaseUser: FirebaseUser | null) => {
         if (!active) return;
         if (!firebaseUser) {
-          setProfile(null);
+          // Hanya hapus profile jika tidak ada sesi teacher lokal yang aktif
+          const local = readProfile();
+          if (!local) {
+            setProfile(null);
+          }
           setStatus('ready');
           return;
         }
 
         try {
-          const userDoc = await getUserProfile(firebaseUser.uid);
-          if (userDoc) {
+          const userEmail = firebaseUser.email || '';
+
+          // Cek khusus untuk akun guru terotorisasi
+          const isTeacher =
+            userEmail.toLowerCase() === 'guru.atomika@atomika.id' ||
+            (await isAuthorizedTeacherEmail(userEmail));
+
+          // Cari profil di database users berdasarkan UID atau Email
+          let userDoc = await getUserProfile(firebaseUser.uid);
+          if (!userDoc && userEmail) {
+            userDoc = await getUserProfileByEmail(userEmail);
+          }
+
+          if (isTeacher || userDoc?.role === 'teacher') {
+            const teacherProfile: AccessProfile = {
+              role: 'teacher',
+              name: userDoc?.name || firebaseUser.displayName || 'Guru ATOMIKA',
+            };
             if (active) {
-              setProfile(toAccessProfile(userDoc));
+              setProfile(teacherProfile);
+              try {
+                window.sessionStorage.setItem(ACCESS_STORAGE_KEY, JSON.stringify(teacherProfile));
+              } catch (e) {
+                console.warn('Gagal menyimpan sesi guru ke sessionStorage:', e);
+              }
+              setStatus('ready');
+            }
+            return;
+          }
+
+          if (userDoc) {
+            if (userDoc.status === 'inactive') {
+              if (active) {
+                setProfile(null);
+                try {
+                  window.sessionStorage.removeItem(ACCESS_STORAGE_KEY);
+                } catch {
+                  // ignore
+                }
+                setStatus('ready');
+              }
+              return;
+            }
+
+            if (active) {
+              const studentProfile = toAccessProfile(userDoc);
+              setProfile(studentProfile);
+              try {
+                window.sessionStorage.setItem(ACCESS_STORAGE_KEY, JSON.stringify(studentProfile));
+              } catch (e) {
+                console.warn('Gagal menyimpan sesi siswa ke sessionStorage:', e);
+              }
               setStatus('ready');
             }
           } else {
-            // Pengguna baru (misal login via Google), buatkan profil awal
-            const defaultName =
-              firebaseUser.displayName ||
-              firebaseUser.email?.split('@')[0] ||
-              'Pengguna ATOMIKA';
-            const initialDoc: FirebaseUserProfile = {
-              uid: firebaseUser.uid,
-              email: firebaseUser.email ?? '',
-              name: defaultName,
-              className: 'Belum diatur',
-              role: 'student',
-              updatedAt: new Date().toISOString(),
-            };
-            void saveUserProfile(initialDoc);
+            // Sesi lokal mungkin ada
+            const local = readProfile();
             if (active) {
-              setProfile(toAccessProfile(initialDoc));
+              setProfile(local);
               setStatus('ready');
             }
           }
         } catch (error) {
           console.error('Gagal mengambil profil pengguna dari Firebase:', error);
           if (active) {
-            setProfile({
-              role: 'student',
-              name: firebaseUser.displayName || firebaseUser.email || 'Pengguna ATOMIKA',
-              className: 'Belum diatur',
-            });
+            const local = readProfile();
+            setProfile(local);
             setStatus('ready');
           }
         }
@@ -101,7 +175,15 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         data: { subscription },
       } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!active) return;
-        setProfile(profileFromSupabaseUser(session?.user ?? null));
+        const nextProfile = profileFromSupabaseUser(session?.user ?? null);
+        setProfile(nextProfile);
+        if (nextProfile) {
+          try {
+            window.sessionStorage.setItem(ACCESS_STORAGE_KEY, JSON.stringify(nextProfile));
+          } catch {
+            // ignore
+          }
+        }
         setStatus('ready');
       });
 
@@ -110,7 +192,8 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         .then(({ data, error }) => {
           if (!active) return;
           if (error) console.error('Gagal memulihkan sesi autentikasi Supabase:', error);
-          setProfile(profileFromSupabaseUser(data.session?.user ?? null));
+          const nextProfile = profileFromSupabaseUser(data.session?.user ?? null) || readProfile();
+          setProfile(nextProfile);
           setStatus('ready');
         })
         .catch((error: unknown) => {
@@ -135,21 +218,39 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     () => ({
       profile,
       status,
+      enter: (nextProfile: AccessProfile) => {
+        try {
+          window.sessionStorage.setItem(ACCESS_STORAGE_KEY, JSON.stringify(nextProfile));
+        } catch (error) {
+          console.error('Gagal menyimpan sesi akses ATOMIKA:', error);
+        }
+        setProfile(nextProfile);
+      },
       exit: async () => {
+        try {
+          window.sessionStorage.removeItem(ACCESS_STORAGE_KEY);
+        } catch (error) {
+          console.error('Gagal menghapus sesi akses ATOMIKA:', error);
+        }
+
         if (isFirebaseConfigured && auth) {
-          await firebaseSignOut(auth);
-          setProfile(null);
-          return;
+          try {
+            await firebaseSignOut(auth);
+          } catch (e) {
+            console.warn('Gagal signout Firebase:', e);
+          }
         }
 
         if (supabase) {
-          const { error } = await supabase.auth.signOut();
-          if (error) throw error;
-          setProfile(null);
-          return;
+          try {
+            const { error } = await supabase.auth.signOut();
+            if (error) console.warn('Gagal signout Supabase:', error);
+          } catch (e) {
+            console.warn('Gagal signout Supabase:', e);
+          }
         }
 
-        throw new Error('Layanan autentikasi belum dikonfigurasi.');
+        setProfile(null);
       },
     }),
     [profile, status]

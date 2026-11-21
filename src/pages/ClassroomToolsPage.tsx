@@ -7,9 +7,13 @@ import {
   Check,
   CheckCircle2,
   ClipboardList,
+  Eye,
+  EyeOff,
+  KeyRound,
   RotateCw,
   Users,
 } from 'lucide-react';
+import { updateTeacherPassword } from '../lib/teacher-auth';
 import {
   CLASSROOM_STORAGE_KEYS,
   getLocalDateKey,
@@ -35,7 +39,7 @@ import {
   subscribeStudentActivities,
 } from '../lib/firebase-db';
 
-type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity';
+type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity' | 'settings';
 
 const TABS: { id: ActivityTab; title: string; description: string; icon: typeof Activity }[] = [
   { id: 'quiz', title: 'Kuis Reaksi', description: '10 soal klasifikasi reaksi', icon: ClipboardList },
@@ -43,7 +47,11 @@ const TABS: { id: ActivityTab; title: string; description: string; icon: typeof 
   { id: 'attendance', title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
   { id: 'progress', title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
 ];
-const TEACHER_TABS = [...TABS, { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users }];
+const TEACHER_TABS = [
+  ...TABS,
+  { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users },
+  { id: 'settings' as const, title: 'Sandi Guru', description: 'Pengaturan sandi khusus guru', icon: KeyRound },
+];
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-8';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:opacity-50';
@@ -775,7 +783,114 @@ function TeacherDashboard({
           ) : <EmptyState text="Belum ada aktivitas siswa. Data akan muncul setelah siswa masuk dan membuka materi atau modul." />}
         </div>
       )}
+      {activeTab === 'settings' && (
+        <div className={panelClass}>
+          <TeacherPasswordSettings />
+        </div>
+      )}
     </section>
+  );
+}
+
+function TeacherPasswordSettings() {
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
+  const [loading, setLoading] = useState(false);
+  const [msg, setMsg] = useState('');
+  const [err, setErr] = useState('');
+
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMsg('');
+    setErr('');
+
+    if (newPassword.length < 6) {
+      setErr('Sandi baru minimal 6 karakter.');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setErr('Konfirmasi sandi tidak sesuai.');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await updateTeacherPassword(newPassword);
+      setMsg('Sandi khusus guru berhasil diperbarui di database! Sandi baru telah aktif.');
+      setNewPassword('');
+      setConfirmPassword('');
+    } catch (error: any) {
+      setErr(error?.message || 'Gagal memperbarui sandi guru.');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="max-w-lg space-y-5">
+      <div>
+        <h3 className="text-lg font-bold text-[#172033]">Pengaturan Sandi Khusus Guru</h3>
+        <p className="text-sm text-[#64748B]">
+          Perbarui sandi akses guru. Sandi disimpan secara aman dalam bentuk hash salted SHA-256 di database Firestore.
+        </p>
+      </div>
+
+      {msg && (
+        <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs font-semibold text-emerald-800">
+          {msg}
+        </div>
+      )}
+      {err && (
+        <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-xs font-semibold text-rose-800">
+          {err}
+        </div>
+      )}
+
+      <form onSubmit={handleUpdate} className="space-y-4">
+        <label className="block space-y-1.5 text-xs font-bold text-[#475569]">
+          <span>Sandi Baru Guru</span>
+          <div className="relative">
+            <input
+              type={showPassword ? 'text' : 'password'}
+              value={newPassword}
+              onChange={(e) => setNewPassword(e.target.value)}
+              placeholder="Masukkan sandi baru minimal 6 karakter"
+              required
+              className="min-h-11 w-full rounded-xl border border-[#E8D8C8] bg-white px-3 pr-10 text-sm text-[#172033] outline-none focus:border-[#C2410C]"
+            />
+            <button
+              type="button"
+              onClick={() => setShowPassword(!showPassword)}
+              className="absolute right-3 top-1/2 -translate-y-1/2 text-[#64748B] hover:text-[#172033]"
+              title={showPassword ? 'Sembunyikan sandi' : 'Tampilkan sandi'}
+            >
+              {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+            </button>
+          </div>
+        </label>
+
+        <label className="block space-y-1.5 text-xs font-bold text-[#475569]">
+          <span>Konfirmasi Sandi Baru</span>
+          <input
+            type={showPassword ? 'text' : 'password'}
+            value={confirmPassword}
+            onChange={(e) => setConfirmPassword(e.target.value)}
+            placeholder="Ketik ulang sandi baru"
+            required
+            className="min-h-11 w-full rounded-xl border border-[#E8D8C8] bg-white px-3 text-sm text-[#172033] outline-none focus:border-[#C2410C]"
+          />
+        </label>
+
+        <button
+          type="submit"
+          disabled={loading}
+          className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:opacity-50"
+        >
+          {loading ? 'Menyimpan...' : 'Perbarui Sandi Guru'}
+        </button>
+      </form>
+    </div>
   );
 }
 

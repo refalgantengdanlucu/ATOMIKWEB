@@ -7,9 +7,11 @@ import {
   CheckCircle2,
   Eye,
   EyeOff,
+  GraduationCap,
   LockKeyhole,
   Mail,
   ShieldCheck,
+  UserRound,
 } from 'lucide-react';
 import {
   createUserWithEmailAndPassword,
@@ -28,7 +30,8 @@ import {
   isFirebaseConfigured,
   setRememberSession as setFirebaseRememberSession,
 } from '../lib/firebase';
-import { getUserProfile, saveUserProfile } from '../lib/firebase-db';
+import { getUserProfile, getUserProfileByEmail, isAuthorizedTeacherEmail, saveUserProfile, toAccessProfile } from '../lib/firebase-db';
+import { loginAsTeacherWithPassword } from '../lib/teacher-auth';
 import {
   getRememberSession as getSupabaseRememberSession,
   setRememberSession as setSupabaseRememberSession,
@@ -65,13 +68,20 @@ function errorMessage(error: { message: string; code?: string }) {
   const message = error.message.toLowerCase();
   const code = error.code ? error.code.toLowerCase() : '';
 
+  if (code.includes('user-not-found') || message.includes('user-not-found')) {
+    return 'Email belum terdaftar. Silakan periksa kembali email Anda.';
+  }
+  if (code.includes('wrong-password') || message.includes('wrong-password')) {
+    return 'Password yang Anda masukkan tidak sesuai.';
+  }
+  if (code.includes('user-disabled') || message.includes('user-disabled')) {
+    return 'Akun belum aktif atau telah dinonaktifkan.';
+  }
   if (
     message.includes('invalid login credentials') ||
-    code.includes('invalid-credential') ||
-    code.includes('wrong-password') ||
-    code.includes('user-not-found')
+    code.includes('invalid-credential')
   ) {
-    return 'Email atau kata sandi tidak sesuai.';
+    return 'Password yang Anda masukkan tidak sesuai atau email belum terdaftar.';
   }
   if (message.includes('user already registered') || code.includes('email-already-in-use')) {
     return 'Email ini sudah terdaftar. Silakan login.';
@@ -169,7 +179,7 @@ function GoogleMark() {
 export function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, status } = useAccess();
+  const { profile, status, enter } = useAccess();
   const mode = location.pathname.replace(/^\//, '') as AuthMode;
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
@@ -178,11 +188,16 @@ export function AuthPage() {
   const stateFrom = (location.state as { from?: unknown } | null)?.from;
   const queryFrom = new URLSearchParams(location.search).get('next');
   const returnTo = safeReturnPath(stateFrom ?? queryFrom);
+  const queryRole = new URLSearchParams(location.search).get('role');
 
   const [name, setName] = useState('');
   const [className, setClassName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [loginRole, setLoginRole] = useState<'student' | 'teacher'>(
+    queryRole === 'teacher' ? 'teacher' : 'student'
+  );
   const [confirmation, setConfirmation] = useState('');
   const [remember, setRemember] = useState(() =>
     isFirebaseConfigured ? getFirebaseRememberSession() : getSupabaseRememberSession()
@@ -195,7 +210,15 @@ export function AuthPage() {
   const strength = useMemo(() => passwordStrength(password), [password]);
 
   useEffect(() => {
-    if (status === 'ready' && profile && !isReset) navigate(returnTo, { replace: true });
+    if (status === 'ready' && profile && !isReset) {
+      const dest =
+        returnTo && returnTo !== '/'
+          ? returnTo
+          : profile.role === 'teacher'
+            ? '/kelas'
+            : '/materi';
+      navigate(dest, { replace: true });
+    }
   }, [isReset, navigate, profile, returnTo, status]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
@@ -234,9 +257,78 @@ export function AuthPage() {
         setFirebaseRememberSession(remember);
 
         if (isLogin) {
-          await signInWithEmailAndPassword(auth, email.trim(), password);
-          navigate(returnTo, { replace: true });
-          return;
+          if (!email.trim() || !password) {
+            setError('Silakan masukkan email dan kata sandi Anda.');
+            return;
+          }
+
+          let cred;
+          try {
+            cred = await signInWithEmailAndPassword(auth, email.trim(), password);
+          } catch (authErr: any) {
+            const code = authErr?.code || '';
+            const msg = (authErr?.message || '').toLowerCase();
+
+            if (code === 'auth/user-not-found' || msg.includes('user-not-found')) {
+              throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
+            }
+            if (code === 'auth/wrong-password' || msg.includes('wrong-password')) {
+              throw new Error('Password yang Anda masukkan tidak sesuai.');
+            }
+            if (code === 'auth/invalid-credential' || msg.includes('invalid-credential')) {
+              const exists = await getUserProfileByEmail(email.trim());
+              if (!exists) {
+                throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
+              }
+              throw new Error('Password yang Anda masukkan tidak sesuai.');
+            }
+            if (code === 'auth/user-disabled' || msg.includes('user-disabled')) {
+              throw new Error('Akun belum aktif atau telah dinonaktifkan.');
+            }
+            if (code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
+              throw new Error('Terlalu banyak percobaan masuk yang gagal. Silakan coba lagi beberapa saat.');
+            }
+            throw authErr;
+          }
+
+          // Ambil profil akun dari database Firestore
+          let userDoc = await getUserProfile(cred.user.uid);
+          if (!userDoc && cred.user.email) {
+            userDoc = await getUserProfileByEmail(cred.user.email);
+          }
+
+          if (!userDoc) {
+            await firebaseSignOut(auth);
+            throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
+          }
+
+          if (userDoc.status === 'inactive') {
+            await firebaseSignOut(auth);
+            throw new Error('Akun belum aktif atau telah dinonaktifkan.');
+          }
+
+          // Otomatis deteksi role berdasarkan data akun di database
+          if (userDoc.role === 'teacher') {
+            const isAuth = await isAuthorizedTeacherEmail(cred.user.email || userDoc.email);
+            if (!isAuth) {
+              await firebaseSignOut(auth);
+              throw new Error('Akun guru ini belum diotorisasi. Silakan hubungi admin sekolah.');
+            }
+            enter({ role: 'teacher', name: userDoc.name || cred.user.displayName || 'Guru ATOMIKA' });
+            const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
+            navigate(dest, { replace: true });
+            return;
+          }
+
+          if (userDoc.role === 'student') {
+            enter(toAccessProfile(userDoc));
+            const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
+            navigate(dest, { replace: true });
+            return;
+          }
+
+          await firebaseSignOut(auth);
+          throw new Error('Peran akun tidak valid. Hubungi administrator.');
         }
 
         if (isRegister) {
@@ -357,6 +449,29 @@ export function AuthPage() {
     }
   };
 
+  const submitTeacher = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+
+    if (!teacherPassword.trim()) {
+      setError('Silakan masukkan sandi khusus guru.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await loginAsTeacherWithPassword(teacherPassword.trim());
+      enter({ role: 'teacher', name: 'Guru ATOMIKA' });
+      const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
+      navigate(dest, { replace: true });
+    } catch (caught: any) {
+      setError(caught?.message || 'Sandi guru tidak sesuai');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const signInWithGoogle = async () => {
     setError('');
     setBusy(true);
@@ -365,20 +480,56 @@ export function AuthPage() {
       if (isFirebaseConfigured && auth) {
         setFirebaseRememberSession(remember);
         const provider = new GoogleAuthProvider();
+        provider.setCustomParameters({ prompt: 'select_account' });
         const cred = await signInWithPopup(auth, provider);
-        const existing = await getUserProfile(cred.user.uid);
-        if (!existing) {
-          await saveUserProfile({
-            uid: cred.user.uid,
-            email: cred.user.email ?? '',
-            name: cred.user.displayName ?? cred.user.email?.split('@')[0] ?? 'Pengguna ATOMIKA',
-            className: 'Belum diatur',
-            role: 'student',
-            updatedAt: new Date().toISOString(),
-          });
+        const googleEmail = cred.user.email || '';
+
+        if (!googleEmail) {
+          await firebaseSignOut(auth);
+          throw new Error('Gagal mendapatkan informasi email dari akun Google.');
         }
-        navigate(returnTo, { replace: true });
-        return;
+
+        // Cari akun di database Firestore berdasarkan UID atau Email
+        let userDoc = await getUserProfile(cred.user.uid);
+        if (!userDoc) {
+          userDoc = await getUserProfileByEmail(googleEmail);
+        }
+
+        // Jika email Google belum terdaftar di database ATOMIKA
+        if (!userDoc) {
+          await firebaseSignOut(auth);
+          throw new Error(
+            'Akun Google ini belum terdaftar di ATOMIKAWEB. Silakan melakukan registrasi terlebih dahulu.'
+          );
+        }
+
+        if (userDoc.status === 'inactive') {
+          await firebaseSignOut(auth);
+          throw new Error('Akun belum aktif atau telah dinonaktifkan.');
+        }
+
+        // Otomatis deteksi role berdasarkan data akun di database
+        if (userDoc.role === 'teacher') {
+          const isAuth = await isAuthorizedTeacherEmail(googleEmail);
+          if (!isAuth) {
+            await firebaseSignOut(auth);
+            throw new Error('Akun guru Google ini belum diotorisasi. Hubungi administrator.');
+          }
+          enter({ role: 'teacher', name: userDoc.name || cred.user.displayName || 'Guru ATOMIKA' });
+          const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
+          navigate(dest, { replace: true });
+          return;
+        }
+
+        if (userDoc.role === 'student') {
+          enter(toAccessProfile(userDoc));
+          const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
+          navigate(dest, { replace: true });
+          return;
+        }
+
+        await firebaseSignOut(auth);
+        throw new Error('Peran akun tidak valid. Hubungi administrator.');
       }
 
       if (supabase) {
@@ -439,15 +590,55 @@ export function AuthPage() {
     <main className="auth-page">
       <section className="auth-card">
         <Brand />
+
+        {isLogin && (
+          <div className="flex rounded-xl bg-[#FFF8F0] p-1 border border-[#F1E5D8] my-4 gap-1">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('student');
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                loginRole === 'student'
+                  ? 'bg-[#C2410C] text-white shadow-xs'
+                  : 'text-[#475569] hover:text-[#172033] hover:bg-orange-50/70'
+              }`}
+            >
+              <UserRound className="w-4 h-4" aria-hidden="true" />
+              <span>Masuk sebagai Murid</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('teacher');
+                setError('');
+              }}
+              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
+                loginRole === 'teacher'
+                  ? 'bg-[#C2410C] text-white shadow-xs'
+                  : 'text-[#475569] hover:text-[#172033] hover:bg-orange-50/70'
+              }`}
+            >
+              <GraduationCap className="w-4 h-4" aria-hidden="true" />
+              <span>Masuk sebagai Guru</span>
+            </button>
+          </div>
+        )}
+
         <div className="auth-heading">
           <h1>
-            {isLogin && 'Selamat Datang Kembali'}
+            {isLogin &&
+              (loginRole === 'teacher' ? 'Portal Akses Guru' : 'Selamat Datang di ATOMIKAWEB')}
             {isRegister && 'Buat Akun Siswa Baru'}
             {isForgot && 'Atur Ulang Kata Sandi'}
             {isReset && 'Buat Kata Sandi Baru'}
           </h1>
           <p>
-            {isLogin && 'Masuk untuk melanjutkan pembelajaran interaktif kimia Anda.'}
+            {isLogin &&
+              (loginRole === 'teacher'
+                ? 'Masukkan sandi khusus guru untuk membuka Dashboard Guru dan manajemen kelas.'
+                : 'Masuk untuk melanjutkan perjalanan belajar dan eksplorasi Struktur Atom.')}
             {isRegister && 'Daftar untuk mengakses modul, laboratorium virtual, dan kuis.'}
             {isForgot && 'Masukkan email yang terdaftar untuk menerima tautan pemulihan kata sandi.'}
             {isReset && 'Masukkan kata sandi baru untuk mengamankan akun Anda.'}
@@ -473,175 +664,220 @@ export function AuthPage() {
           </div>
         )}
 
-        <form onSubmit={submit} className="auth-form" noValidate>
-          {isRegister && (
-            <>
-              <label className="auth-field" htmlFor="name">
-                <span>Nama Lengkap</span>
-                <span className="auth-input-wrap">
-                  <input
-                    id="name"
-                    name="name"
-                    type="text"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Contoh: Budi Santoso"
-                    autoComplete="name"
-                    required
-                  />
-                </span>
-              </label>
+        {isLogin && loginRole === 'teacher' ? (
+          <>
+            <form onSubmit={submitTeacher} className="auth-form" noValidate>
+              <PasswordField
+                id="teacherPassword"
+                label="Sandi Khusus Guru"
+                value={teacherPassword}
+                onChange={setTeacherPassword}
+                autoComplete="current-password"
+              />
 
-              <label className="auth-field" htmlFor="className">
-                <span>Kelas</span>
-                <span className="auth-input-wrap">
-                  <input
-                    id="className"
-                    name="className"
-                    type="text"
-                    value={className}
-                    onChange={(event) => setClassName(event.target.value)}
-                    placeholder="Contoh: X MIPA 1"
-                    autoComplete="organization"
-                  />
-                </span>
-              </label>
-            </>
-          )}
-
-          {!isReset && (
-            <label className="auth-field" htmlFor="email">
-              <span>Alamat Email</span>
-              <span className="auth-input-wrap">
-                <Mail size={18} aria-hidden="true" />
-                <input
-                  id="email"
-                  name="email"
-                  type="email"
-                  value={email}
-                  onChange={(event) => setEmail(event.target.value)}
-                  placeholder="nama@sekolah.sch.id"
-                  autoComplete="email"
-                  required
-                />
-              </span>
-            </label>
-          )}
-
-          {!isForgot && (
-            <PasswordField
-              id="password"
-              label={isReset ? 'Kata Sandi Baru' : 'Kata Sandi'}
-              value={password}
-              onChange={setPassword}
-              autoComplete={isRegister || isReset ? 'new-password' : 'current-password'}
-            />
-          )}
-
-          {(isRegister || isReset) && (
-            <>
-              <div className="auth-strength" aria-live="polite">
-                <div className="auth-strength-bars">
-                  {[1, 2, 3, 4].map((level) => (
-                    <span
-                      key={level}
-                      className={strength >= level ? `auth-strength-${strength}` : ''}
-                    />
-                  ))}
-                </div>
-                <div className="auth-strength-checklist">
-                  {passwordRequirements.map(({ label, test }) => (
-                    <span
-                      key={label}
-                      className={test(password) ? 'is-satisfied' : 'is-unsatisfied'}
-                    >
-                      <ShieldCheck size={14} aria-hidden="true" />
-                      {label}
-                    </span>
-                  ))}
-                </div>
+              <div className="rounded-xl bg-[#FFF8F0] border border-[#F1E5D8] p-3 text-xs text-[#64748B] leading-relaxed">
+                🔑 Guru dapat langsung mengakses Dashboard Guru menggunakan sandi otorisasi tanpa perlu mendaftarkan email satu per satu.
               </div>
 
-              <PasswordField
-                id="confirmation"
-                label="Konfirmasi Kata Sandi"
-                value={confirmation}
-                onChange={setConfirmation}
-                autoComplete="new-password"
-              />
-            </>
-          )}
+              <button
+                type="submit"
+                className="auth-button auth-button-primary"
+                disabled={busy}
+              >
+                {busy ? (
+                  <span>Memvalidasi sandi...</span>
+                ) : (
+                  <span>Masuk sebagai Guru</span>
+                )}
+              </button>
+            </form>
 
-          {isLogin && (
-            <div className="auth-row-between">
-              <label className="auth-checkbox">
-                <input
-                  type="checkbox"
-                  checked={remember}
-                  onChange={(event) => setRemember(event.target.checked)}
-                />
-                <span>Ingat saya di perangkat ini</span>
-              </label>
-              <Link to="/forgot-password" className="auth-link-subtle">
-                Lupa kata sandi?
-              </Link>
+            <div className="auth-foot">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginRole('student');
+                  setError('');
+                }}
+                className="auth-link-subtle text-xs"
+              >
+                Bukan guru? Masuk sebagai Murid di sini
+              </button>
             </div>
-          )}
-
-          <button
-            type="submit"
-            className="auth-button auth-button-primary"
-            disabled={busy}
-          >
-            {busy ? (
-              <span>Memproses...</span>
-            ) : (
-              <span>
-                {isLogin && 'Masuk ke Akun'}
-                {isRegister && 'Daftar Sekarang'}
-                {isForgot && 'Kirim Tautan Pemulihan'}
-                {isReset && 'Simpan Kata Sandi'}
-              </span>
-            )}
-          </button>
-        </form>
-
-        {(isLogin || isRegister) && (
+          </>
+        ) : (
           <>
-            <div className="auth-divider">
-              <span>atau</span>
-            </div>
+            <form onSubmit={submit} className="auth-form" noValidate>
+              {isRegister && (
+                <>
+                  <label className="auth-field" htmlFor="name">
+                    <span>Nama Lengkap</span>
+                    <span className="auth-input-wrap">
+                      <input
+                        id="name"
+                        name="name"
+                        type="text"
+                        value={name}
+                        onChange={(event) => setName(event.target.value)}
+                        placeholder="Contoh: Budi Santoso"
+                        autoComplete="name"
+                        required
+                      />
+                    </span>
+                  </label>
 
-            <button
-              type="button"
-              className="auth-button auth-button-oauth"
-              onClick={signInWithGoogle}
-              disabled={busy}
-            >
-              <GoogleMark />
-              <span>Lanjutkan dengan Google</span>
-            </button>
+                  <label className="auth-field" htmlFor="className">
+                    <span>Kelas</span>
+                    <span className="auth-input-wrap">
+                      <input
+                        id="className"
+                        name="className"
+                        type="text"
+                        value={className}
+                        onChange={(event) => setClassName(event.target.value)}
+                        placeholder="Contoh: X MIPA 1"
+                        autoComplete="organization"
+                      />
+                    </span>
+                  </label>
+                </>
+              )}
+
+              {!isReset && (
+                <label className="auth-field" htmlFor="email">
+                  <span>Alamat Email</span>
+                  <span className="auth-input-wrap">
+                    <Mail size={18} aria-hidden="true" />
+                    <input
+                      id="email"
+                      name="email"
+                      type="email"
+                      value={email}
+                      onChange={(event) => setEmail(event.target.value)}
+                      placeholder="nama@sekolah.sch.id"
+                      autoComplete="email"
+                      required
+                    />
+                  </span>
+                </label>
+              )}
+
+              {!isForgot && (
+                <PasswordField
+                  id="password"
+                  label={isReset ? 'Kata Sandi Baru' : 'Kata Sandi'}
+                  value={password}
+                  onChange={setPassword}
+                  autoComplete={isRegister || isReset ? 'new-password' : 'current-password'}
+                />
+              )}
+
+              {(isRegister || isReset) && (
+                <>
+                  <div className="auth-strength" aria-live="polite">
+                    <div className="auth-strength-bars">
+                      {[1, 2, 3, 4].map((level) => (
+                        <span
+                          key={level}
+                          className={strength >= level ? `auth-strength-${strength}` : ''}
+                        />
+                      ))}
+                    </div>
+                    <div className="auth-strength-checklist">
+                      {passwordRequirements.map(({ label, test }) => (
+                        <span
+                          key={label}
+                          className={test(password) ? 'is-satisfied' : 'is-unsatisfied'}
+                        >
+                          <ShieldCheck size={14} aria-hidden="true" />
+                          {label}
+                        </span>
+                      ))}
+                    </div>
+                  </div>
+
+                  <PasswordField
+                    id="confirmation"
+                    label="Konfirmasi Kata Sandi"
+                    value={confirmation}
+                    onChange={setConfirmation}
+                    autoComplete="new-password"
+                  />
+                </>
+              )}
+
+              {isLogin && (
+                <div className="auth-row-between">
+                  <label className="auth-checkbox">
+                    <input
+                      type="checkbox"
+                      checked={remember}
+                      onChange={(event) => setRemember(event.target.checked)}
+                    />
+                    <span>Ingat saya di perangkat ini</span>
+                  </label>
+                  <Link to="/forgot-password" className="auth-link-subtle">
+                    Lupa kata sandi?
+                  </Link>
+                </div>
+              )}
+
+              <button
+                type="submit"
+                className="auth-button auth-button-primary"
+                disabled={busy}
+              >
+                {busy ? (
+                  <span>Memproses...</span>
+                ) : (
+                  <span>
+                    {isLogin && 'Masuk'}
+                    {isRegister && 'Daftar Sekarang'}
+                    {isForgot && 'Kirim Tautan Pemulihan'}
+                    {isReset && 'Simpan Kata Sandi'}
+                  </span>
+                )}
+              </button>
+            </form>
+
+            {(isLogin || isRegister) && (
+              <>
+                <div className="auth-divider">
+                  <span>atau</span>
+                </div>
+
+                <button
+                  type="button"
+                  className="auth-button auth-button-oauth"
+                  onClick={signInWithGoogle}
+                  disabled={busy}
+                >
+                  <GoogleMark />
+                  <span>Masuk dengan Google</span>
+                </button>
+              </>
+            )}
+
+            <div className="auth-foot">
+              {isLogin && (
+                <p>
+                  Belum memiliki akun? <Link to="/register">Daftar di sini</Link>
+                </p>
+              )}
+              {isRegister && (
+                <p>
+                  Sudah memiliki akun? <Link to="/login">Masuk sekarang</Link>
+                </p>
+              )}
+              {(isForgot || isReset) && (
+                <Link to="/login" className="auth-foot-back">
+                  <ArrowLeft size={16} aria-hidden="true" />
+                  <span>Kembali ke halaman login</span>
+                </Link>
+              )}
+            </div>
           </>
         )}
-
-        <div className="auth-foot">
-          {isLogin && (
-            <p>
-              Belum memiliki akun? <Link to="/register">Daftar di sini</Link>
-            </p>
-          )}
-          {isRegister && (
-            <p>
-              Sudah memiliki akun? <Link to="/login">Masuk sekarang</Link>
-            </p>
-          )}
-          {(isForgot || isReset) && (
-            <Link to="/login" className="auth-foot-back">
-              <ArrowLeft size={16} aria-hidden="true" />
-              <span>Kembali ke halaman login</span>
-            </Link>
-          )}
-        </div>
       </section>
     </main>
   );

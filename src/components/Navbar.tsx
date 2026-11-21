@@ -1,5 +1,5 @@
-import { NavLink, useLocation, Link } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut } from 'lucide-react';
+import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LogOut, LogIn, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 interface NavItem {
@@ -20,11 +20,17 @@ const NAV_ITEMS: NavItem[] = [
   },
   { to: '/kuis', label: 'Kuis', icon: HelpCircle },
   { to: '/progres', label: 'Progres', icon: Award },
-  { to: '/kelas', label: 'Kegiatan Kelas', icon: Users },
+  {
+    to: '/kelas',
+    label: 'Kegiatan Kelas',
+    icon: Users,
+    aliases: ['/guru', '/dashboard'],
+  },
 ];
 
 export function Navbar() {
   const location = useLocation();
+  const navigate = useNavigate();
   const { profile, exit } = useAccess();
   const [logoutError, setLogoutError] = useState('');
 
@@ -32,6 +38,7 @@ export function Navbar() {
     setLogoutError('');
     try {
       await exit();
+      navigate('/', { replace: true });
     } catch (error) {
       console.error('Gagal mengakhiri sesi:', error);
       setLogoutError('Sesi belum dapat diakhiri. Silakan coba lagi.');
@@ -103,26 +110,10 @@ export function Navbar() {
             {NAV_ITEMS.map((item) => {
               const Icon = item.icon;
               const active = checkIsActive(item);
-              const isLocked =
-                profile?.role === 'student' &&
-                ['/laboratorium', '/kuis', '/progres'].includes(item.to);
-              const label = item.to === '/kelas' && profile?.role === 'teacher'
-                ? 'Dashboard Guru'
-                : item.label;
-
-              if (isLocked) {
-                return (
-                  <span
-                    key={item.to}
-                    aria-disabled="true"
-                    title="Terkunci untuk akses siswa"
-                    className="flex min-h-[44px] cursor-not-allowed items-center gap-2 rounded-xl border border-transparent px-3.5 py-2 text-sm font-semibold text-slate-400"
-                  >
-                    <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                    <span>{label}</span>
-                  </span>
-                );
-              }
+              const label =
+                item.to === '/kelas' && profile?.role === 'teacher'
+                  ? 'Dashboard Guru'
+                  : item.label;
 
               return (
                 <NavLink
@@ -147,18 +138,44 @@ export function Navbar() {
             })}
           </nav>
 
-          <div className="hidden sm:flex items-center gap-2">
-            <div className="text-right">
-              <p className="text-xs font-bold text-[#172033]">{profile?.name}</p>
-              <p className="text-[10px] text-[#64748B]">
-                {profile?.role === 'teacher' ? 'Guru' : `Siswa · ${profile?.className}`}
-              </p>
+          {/* Right Action: User profile if logged in, or Masuk & Mulai Belajar if guest */}
+          {profile ? (
+            <div className="hidden sm:flex items-center gap-2">
+              <div className="text-right">
+                <p className="text-xs font-bold text-[#172033]">{profile.name}</p>
+                <p className="text-[10px] text-[#64748B]">
+                  {profile.role === 'teacher' ? 'Guru' : `Siswa · ${profile.className}`}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => void handleExit()}
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#F1E5D8] px-3 text-xs font-semibold text-[#475569] hover:bg-orange-50 transition-colors"
+                title="Keluar dari akun"
+              >
+                <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+                Keluar
+              </button>
             </div>
-            <button type="button" onClick={() => void handleExit()} className="inline-flex min-h-10 items-center gap-1.5 rounded-lg border border-[#F1E5D8] px-3 text-xs font-semibold text-[#475569] hover:bg-orange-50" title="Keluar dari akun">
-              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-              Keluar
-            </button>
-          </div>
+          ) : (
+            <div className="hidden sm:flex items-center gap-2">
+              <Link
+                to="/login"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#F1E5D8] bg-white px-3.5 py-2 text-xs font-semibold text-[#172033] hover:bg-orange-50/80 hover:border-[#F97316]/40 transition-colors shadow-2xs"
+                title="Masuk ke Akun ATOMIKA"
+              >
+                <LogIn className="h-3.5 w-3.5 text-[#F97316]" aria-hidden="true" />
+                <span>Masuk</span>
+              </Link>
+              <Link
+                to="/materi"
+                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-colors"
+              >
+                <span>Mulai Belajar</span>
+                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+              </Link>
+            </div>
+          )}
 
           {/* Badge Kurikulum */}
           <div className="hidden lg:flex items-center gap-1.5 text-xs text-[#475569] bg-[#FFF8F0] px-3 py-1.5 rounded-full border border-[#F1E5D8]">
@@ -177,26 +194,10 @@ export function Navbar() {
           {NAV_ITEMS.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
-            const isLocked =
-              profile?.role === 'student' &&
-              ['/laboratorium', '/kuis', '/progres'].includes(item.to);
-            const label = item.to === '/kelas' && profile?.role === 'teacher'
-              ? 'Dashboard Guru'
-              : item.label;
-
-            if (isLocked) {
-              return (
-                <span
-                  key={item.to}
-                  aria-disabled="true"
-                  title="Terkunci untuk akses siswa"
-                  className="flex min-h-[36px] shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-transparent px-3 py-1.5 text-xs font-semibold text-slate-400"
-                >
-                  <LockKeyhole className="h-3.5 w-3.5" aria-hidden="true" />
-                  <span>{label}</span>
-                </span>
-              );
-            }
+            const label =
+              item.to === '/kelas' && profile?.role === 'teacher'
+                ? 'Dashboard Guru'
+                : item.label;
 
             return (
               <NavLink
@@ -219,10 +220,24 @@ export function Navbar() {
               </NavLink>
             );
           })}
-          <button type="button" onClick={() => void handleExit()} className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-orange-50">
-            <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-            Keluar
-          </button>
+          {profile ? (
+            <button
+              type="button"
+              onClick={() => void handleExit()}
+              className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-[#475569] hover:bg-orange-50"
+            >
+              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
+              Keluar
+            </button>
+          ) : (
+            <Link
+              to="/login"
+              className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg bg-[#C2410C] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9A3412]"
+            >
+              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
+              Masuk
+            </Link>
+          )}
         </nav>
       </div>
     </header>

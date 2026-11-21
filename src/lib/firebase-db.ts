@@ -3,9 +3,11 @@ import {
   doc,
   setDoc,
   getDoc,
+  getDocs,
   onSnapshot,
   query,
   orderBy,
+  where,
   limit,
 } from 'firebase/firestore';
 import { db, isFirebaseConfigured } from './firebase';
@@ -25,7 +27,58 @@ export interface FirebaseUserProfile {
   name: string;
   className: string;
   role: 'student' | 'teacher';
+  status?: 'active' | 'inactive';
   updatedAt: string;
+}
+
+/**
+ * Daftar email guru default yang diotorisasi.
+ * Admin juga dapat menambahkan email guru baru ke koleksi 'authorized_teachers' di Firestore.
+ */
+const DEFAULT_AUTHORIZED_TEACHER_EMAILS = [
+  'guru@atomika.id',
+  'guru.atomika@atomika.id',
+  'guru.kimia@sekolah.sch.id',
+  'refaldi.widiansyah.2403316@students.um.ac.id',
+];
+
+/**
+ * Memverifikasi apakah suatu email telah diotorisasi sebagai guru.
+ * Mengecek konfigurasi environment, daftar guru default, dan koleksi Firestore 'authorized_teachers'.
+ */
+export async function isAuthorizedTeacherEmail(email: string): Promise<boolean> {
+  const normalized = email.trim().toLowerCase();
+  if (!normalized) return false;
+
+  // 1. Cek dari environment variable jika diset
+  const envList = (import.meta.env.VITE_AUTHORIZED_TEACHER_EMAILS || '')
+    .split(',')
+    .map((e: string) => e.trim().toLowerCase())
+    .filter(Boolean);
+  if (envList.includes(normalized)) return true;
+
+  // 2. Cek daftar email guru default
+  if (DEFAULT_AUTHORIZED_TEACHER_EMAILS.map((e) => e.toLowerCase()).includes(normalized)) {
+    return true;
+  }
+
+  // 3. Cek koleksi 'authorized_teachers' di Firestore
+  if (db && isFirebaseConfigured) {
+    try {
+      const teacherRef = doc(db, 'authorized_teachers', normalized);
+      const teacherSnap = await getDoc(teacherRef);
+      if (teacherSnap.exists()) return true;
+
+      // Cek apakah ada record di users dengan role teacher yang sudah terverifikasi
+      const userRef = query(collection(db, 'users'), where('email', '==', normalized), where('role', '==', 'teacher'), limit(1));
+      const userSnap = await getDocs(userRef);
+      if (!userSnap.empty) return true;
+    } catch (err) {
+      console.warn('Gagal memverifikasi email guru dari Firestore:', err);
+    }
+  }
+
+  return false;
 }
 
 /**
@@ -46,6 +99,39 @@ export async function getUserProfile(uid: string): Promise<FirebaseUserProfile |
   const snap = await getDoc(userRef);
   if (!snap.exists()) return null;
   return snap.data() as FirebaseUserProfile;
+}
+
+/**
+ * Mengambil profil pengguna dari koleksi 'users' berdasarkan Email.
+ */
+export async function getUserProfileByEmail(email: string): Promise<FirebaseUserProfile | null> {
+  if (!db || !isFirebaseConfigured) return null;
+  const normalized = email.trim().toLowerCase();
+  try {
+    const q = query(collection(db, 'users'), where('email', '==', normalized), limit(1));
+    const snap = await getDocs(q);
+    if (!snap.empty) {
+      return snap.docs[0].data() as FirebaseUserProfile;
+    }
+    // Jika tidak ditemukan dengan huruf kecil, coba dengan email asli
+    const qOrig = query(collection(db, 'users'), where('email', '==', email.trim()), limit(1));
+    const snapOrig = await getDocs(qOrig);
+    if (!snapOrig.empty) {
+      return snapOrig.docs[0].data() as FirebaseUserProfile;
+    }
+  } catch (err) {
+    console.warn('Gagal mencari profil user berdasarkan email:', err);
+  }
+  return null;
+}
+
+/**
+ * Menentukan rute dashboard utama berdasarkan role pengguna.
+ * - Guru -> '/kelas' (Dashboard Guru)
+ * - Murid -> '/materi' (Dashboard Murid)
+ */
+export function getDashboardRouteForRole(role: 'student' | 'teacher'): string {
+  return role === 'teacher' ? '/kelas' : '/materi';
 }
 
 /**
