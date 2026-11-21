@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
+import { useAccess } from '../lib/access-context';
+import { saveQuizAttempt } from '../lib/firebase-db';
 import { getProgress, saveProgress } from '../lib/progress';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send } from 'lucide-react';
@@ -70,6 +72,7 @@ export function QuizSessionPage() {
 }
 
 function QuizSession({ topic }: { topic: Topic }) {
+  const { profile } = useAccess();
   const questions = QUIZ_QUESTIONS[topic.id];
   const [session, setSession] = useState(() => readQuizSession(topic.id));
   const [storageAvailable, setStorageAvailable] = useState(true);
@@ -96,6 +99,20 @@ function QuizSession({ topic }: { topic: Topic }) {
     setSession(completedSession);
 
     const score = Math.round((correctCount / questions.length) * 100);
+
+    if (profile) {
+      void saveQuizAttempt({
+        id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+        name: profile.name,
+        className: profile.role === 'student' ? profile.className : '',
+        quizTitle: topic.title,
+        score: correctCount,
+        maxScore: questions.length,
+        percent: score,
+        submittedAt: new Date().toISOString(),
+      });
+    }
+
     const progress = getProgress();
     const previousResult = progress.quizResults[topic.id];
     saveProgress({

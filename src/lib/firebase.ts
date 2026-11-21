@@ -1,4 +1,4 @@
-import { getApp, getApps, initializeApp } from 'firebase/app';
+import { getApp, getApps, initializeApp, type FirebaseOptions } from 'firebase/app';
 import {
   browserLocalPersistence,
   browserSessionPersistence,
@@ -7,26 +7,34 @@ import {
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
 
-const apiKey = import.meta.env.VITE_FIREBASE_API_KEY?.trim();
-const authDomain = import.meta.env.VITE_FIREBASE_AUTH_DOMAIN?.trim();
-const projectId = import.meta.env.VITE_FIREBASE_PROJECT_ID?.trim();
-const appId = import.meta.env.VITE_FIREBASE_APP_ID?.trim();
-const storageBucket = import.meta.env.VITE_FIREBASE_STORAGE_BUCKET?.trim();
-const messagingSenderId = import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID?.trim();
+function stripQuotes(value?: string) {
+  return value?.trim().replace(/^["']|["']$/g, '');
+}
+
+const apiKey = stripQuotes(import.meta.env.VITE_FIREBASE_API_KEY);
+const authDomain = stripQuotes(import.meta.env.VITE_FIREBASE_AUTH_DOMAIN);
+const projectId = stripQuotes(import.meta.env.VITE_FIREBASE_PROJECT_ID);
+const storageBucket = stripQuotes(import.meta.env.VITE_FIREBASE_STORAGE_BUCKET);
+const messagingSenderId = stripQuotes(import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID);
+const appId = stripQuotes(import.meta.env.VITE_FIREBASE_APP_ID);
+const measurementId = stripQuotes(import.meta.env.VITE_FIREBASE_MEASUREMENT_ID);
+
+const firebaseConfig: FirebaseOptions = {
+  apiKey,
+  authDomain,
+  projectId,
+  storageBucket,
+  messagingSenderId,
+  appId,
+  measurementId: measurementId || undefined,
+};
 
 export const isFirebaseConfigured = Boolean(apiKey && authDomain && projectId && appId);
 
 const firebaseApp = isFirebaseConfigured
-  ? getApps().length
+  ? getApps().length > 0
     ? getApp()
-    : initializeApp({
-        apiKey,
-        authDomain,
-        projectId,
-        appId,
-        ...(storageBucket ? { storageBucket } : {}),
-        ...(messagingSenderId ? { messagingSenderId } : {}),
-      })
+    : initializeApp(firebaseConfig)
   : null;
 
 export const auth = firebaseApp ? getAuth(firebaseApp) : null;
