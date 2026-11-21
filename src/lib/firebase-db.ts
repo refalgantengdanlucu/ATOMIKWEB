@@ -259,12 +259,74 @@ export function subscribeAttendance(
 }
 
 /**
+ * Berlangganan seluruh data presensi untuk tampilan rekap guru.
+ */
+export function subscribeAllAttendance(
+  callback: (records: AttendanceRecord[]) => void
+): () => void {
+  if (!db || !isFirebaseConfigured) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(collection(db, 'attendance'), orderBy('checkedInAt', 'desc'), limit(300));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: AttendanceRecord[] = [];
+      snapshot.forEach((d) => items.push(d.data() as AttendanceRecord));
+      callback(items);
+    },
+    (error) => {
+      console.error('Gagal mengambil seluruh data presensi dari Firebase:', error);
+    }
+  );
+}
+
+/**
  * Menyimpan respon polling siswa ke koleksi 'classroom_polls'.
  */
 export async function savePollResponse(sessionId: string, response: PollResponse): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
   const pollRef = doc(db, 'classroom_polls', `${sessionId}_${response.id}`);
   await setDoc(pollRef, { sessionId, ...response }, { merge: true });
+}
+
+/**
+ * Berlangganan data polling kelas secara realtime.
+ */
+export function subscribePollResponses(
+  sessionId: string,
+  callback: (responses: PollResponse[]) => void
+): () => void {
+  if (!db || !isFirebaseConfigured) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(
+    collection(db, 'classroom_polls'),
+    where('sessionId', '==', sessionId),
+    limit(300)
+  );
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: PollResponse[] = [];
+      snapshot.forEach((d) => {
+        const data = d.data();
+        items.push({
+          id: data.id,
+          optionIndex: data.optionIndex,
+          submittedAt: data.submittedAt,
+        });
+      });
+      callback(items);
+    },
+    (error) => {
+      console.error('Gagal mengambil respon polling dari Firebase:', error);
+    }
+  );
 }
 
 /**
@@ -275,4 +337,29 @@ export async function saveStudentProgress(progress: StudentProgress): Promise<vo
   const docId = normalizeStudentName(progress.name);
   const progressRef = doc(db, 'student_progress', docId);
   await setDoc(progressRef, progress, { merge: true });
+}
+
+/**
+ * Berlangganan data progres tugas siswa untuk tampilan rekap guru.
+ */
+export function subscribeStudentProgress(
+  callback: (records: StudentProgress[]) => void
+): () => void {
+  if (!db || !isFirebaseConfigured) {
+    callback([]);
+    return () => {};
+  }
+
+  const q = query(collection(db, 'student_progress'), orderBy('updatedAt', 'desc'), limit(200));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const items: StudentProgress[] = [];
+      snapshot.forEach((d) => items.push(d.data() as StudentProgress));
+      callback(items);
+    },
+    (error) => {
+      console.error('Gagal mengambil data progres siswa dari Firebase:', error);
+    }
+  );
 }

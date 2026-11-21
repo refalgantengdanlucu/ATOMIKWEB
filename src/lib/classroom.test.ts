@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import {
+  ATOM_QUESTIONS,
   getLocalDateKey,
   normalizeStudentName,
   POLL_OPTIONS,
@@ -8,7 +9,24 @@ import {
 } from './classroom';
 
 describe('classroom activity defaults', () => {
-  it('provides ten reaction classification questions and four poll choices', () => {
+  it('menyediakan 10 soal kuis Struktur Atom dengan tingkat Mudah, Sedang, dan Sukar', () => {
+    expect(ATOM_QUESTIONS).toHaveLength(10);
+    const mudah = ATOM_QUESTIONS.filter((q) => q.difficulty === 'Mudah');
+    const sedang = ATOM_QUESTIONS.filter((q) => q.difficulty === 'Sedang');
+    const sukar = ATOM_QUESTIONS.filter((q) => q.difficulty === 'Sukar');
+
+    expect(mudah.length).toBeGreaterThan(0);
+    expect(sedang.length).toBeGreaterThan(0);
+    expect(sukar.length).toBeGreaterThan(0);
+
+    ATOM_QUESTIONS.forEach((q) => {
+      expect(q.options).toHaveLength(4);
+      expect(q.options).toContain(q.correct);
+      expect(q.explanation.length).toBeGreaterThan(15);
+    });
+  });
+
+  it('provides reaction classification questions compatibility alias and four poll choices', () => {
     expect(REACTION_QUESTIONS).toHaveLength(10);
     expect(POLL_OPTIONS).toHaveLength(4);
     expect(PROGRESS_STAGES).toHaveLength(4);
