@@ -223,16 +223,6 @@ export function getTopicCompletion(
 }
 
 /**
- * Mengosongkan data progres kembali ke kondisi awal (awal belajar).
- */
-export function resetAllProgress(): void {
-  saveProgress({
-    ...DEFAULT_PROGRESS,
-    updatedAt: new Date().toISOString(),
-  });
-}
-
-/**
  * Hook React untuk memantau data progres secara reaktif di komponen mana pun.
  */
 export function useProgress() {
@@ -264,7 +254,6 @@ export function useProgress() {
     isAllTopicsCompleted: () => isAllTopicsCompleted(progress.visitedSectionIds),
     isLabModeUnlocked: (mode: string) => isLabModeUnlocked(mode, progress.visitedSectionIds),
     isQuizTopicUnlocked: (topicId: TopicId) => isQuizTopicUnlocked(topicId, progress.visitedSectionIds),
-    resetProgress: resetAllProgress,
   };
 }
 

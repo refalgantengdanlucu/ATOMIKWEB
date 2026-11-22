@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Atom, Award, BookOpen, HelpCircle, Users } from 'lucide-react';
+import { ArrowRight, Atom, BookOpen, HelpCircle, Users } from 'lucide-react';
 import { useAccess } from '../lib/access-context';
 import { StudentActivityReporter } from '../components/AccessGate';
 
@@ -21,12 +21,6 @@ const HOME_LINKS = [
     label: 'Kuis',
     description: 'Latih pemahaman dengan soal interaktif.',
     icon: HelpCircle,
-  },
-  {
-    to: '/progres',
-    label: 'Progres',
-    description: 'Lihat perkembangan belajar kamu.',
-    icon: Award,
   },
   {
     to: '/kelas',
