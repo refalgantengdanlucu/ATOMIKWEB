@@ -3,7 +3,6 @@ import { Navigate, useLocation } from 'react-router-dom';
 import { useAccess } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
 import type { StudentActivity } from '../lib/classroom';
-import { sendActivityToSheets } from '../lib/classroom-sync';
 import { saveStudentActivity } from '../lib/firebase-db';
 import { TOPICS } from '../data/topics';
 import { SECTIONS } from '../data/sections';
@@ -91,7 +90,6 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
     ];
     writeClassroomData(CLASSROOM_STORAGE_KEYS.activity, nextActivities);
     void saveStudentActivity(record);
-    void sendActivityToSheets(profile, record);
   }, [blocked, location.pathname, location.search, profile]);
 
   useEffect(() => {

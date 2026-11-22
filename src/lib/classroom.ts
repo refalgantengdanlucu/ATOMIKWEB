@@ -292,3 +292,39 @@ export function writeClassroomData<T>(key: string, value: T): boolean {
     return false;
   }
 }
+
+export interface TrackedQuizResult extends QuizAttempt {
+  className: string;
+  quizTitle: string;
+  maxScore: number;
+  percent: number;
+}
+
+export function recordClassroomQuiz(attempt: TrackedQuizResult): void {
+  try {
+    const current = readClassroomData<TrackedQuizResult[]>(CLASSROOM_STORAGE_KEYS.quiz, []);
+    const exists = current.some((item) => item.id === attempt.id);
+    const updated = exists
+      ? current.map((item) => (item.id === attempt.id ? attempt : item))
+      : [attempt, ...current];
+    writeClassroomData(CLASSROOM_STORAGE_KEYS.quiz, updated);
+  } catch (error) {
+    console.warn('Gagal mencatat hasil kuis ke penyimpanan lokal:', error);
+  }
+}
+
+export function recordStudentActivity(activity: StudentActivity): void {
+  try {
+    const activities = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
+    const studentKey = `${normalizeStudentName(activity.name)}|${normalizeStudentName(activity.className)}`;
+    const nextActivities = [
+      ...activities.filter(
+        (item) => `${normalizeStudentName(item.name)}|${normalizeStudentName(item.className)}` !== studentKey,
+      ),
+      activity,
+    ];
+    writeClassroomData(CLASSROOM_STORAGE_KEYS.activity, nextActivities);
+  } catch (error) {
+    console.warn('Gagal mencatat aktivitas siswa ke penyimpanan lokal:', error);
+  }
+}
