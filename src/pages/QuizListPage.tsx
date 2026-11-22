@@ -26,29 +26,29 @@ export function QuizListPage() {
         </p>
       </div>
 
-      {/* Aturan Nilai Card */}
+      {/* Komposisi dan aturan nilai */}
       <div className="p-6 rounded-2xl bg-white border border-[#F1E5D8] shadow-xs">
         <h2 className="text-sm font-bold uppercase tracking-wider text-[#172033] mb-3 flex items-center gap-2">
           <Award className="w-4 h-4 text-[#F97316]" aria-hidden="true" />
-          <span>Aturan Penilaian Kuis</span>
+          <span>Komposisi Paket Kuis</span>
         </h2>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs text-[#475569]">
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
-            <div className="font-bold text-[#172033] text-sm">5 Soal per Paket</div>
+            <div className="font-bold text-[#172033] text-sm">7 Soal per Paket</div>
             <p className="mt-1">
-              Setiap topik memiliki 5 soal pilihan ganda dengan opsi A, B, C, D, dan E.
+              Tiap paket berisi 5 soal pilihan ganda dan 2 soal esai.
             </p>
           </div>
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
-            <div className="font-bold text-[#172033] text-sm">Rumus Nilai</div>
+            <div className="font-bold text-[#172033] text-sm">Nilai Pilihan Ganda</div>
             <p className="mt-1">
-              Nilai = (jawaban benar ÷ 5) × 100. Nilai terakhir dan terbaik tersimpan di progres.
+              Nilai = (jawaban benar ÷ 5) × 100. Jawaban esai tidak dinilai otomatis.
             </p>
           </div>
           <div className="p-3 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8]">
-            <div className="font-bold text-[#172033] text-sm">Umpan Balik Instan</div>
+            <div className="font-bold text-[#172033] text-sm">Simpan Jawaban</div>
             <p className="mt-1">
-              Jawaban dan pembahasan muncul setelah semua soal dijawab dan kuis dikirim.
+              Jawaban pilihan ganda dan esai tersimpan di browser ini. Pembahasan pilihan ganda muncul setelah dikirim.
             </p>
           </div>
         </div>
@@ -80,7 +80,7 @@ export function QuizListPage() {
                       Terkunci
                     </span>
                   )}
-                  <span className="text-xs text-[#64748B]">5 Soal</span>
+                  <span className="text-xs text-[#64748B]">5 PG · 2 Esai</span>
                 </div>
                 <h3 className={`font-bold text-lg mb-2 ${isUnlocked ? 'text-[#172033]' : 'text-slate-500'}`}>
                   {topic.title}

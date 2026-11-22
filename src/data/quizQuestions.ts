@@ -9,6 +9,12 @@ export interface QuizQuestion {
   wrongFeedback: Record<string, string>;
 }
 
+export interface EssayQuestion {
+  id: string;
+  number: number;
+  prompt: string;
+}
+
 const QUIZ_QUESTION_BANK: Record<TopicId, QuizQuestion[]> = {
   t1: [
     {
@@ -299,6 +305,45 @@ const QUIZ_QUESTION_BANK: Record<TopicId, QuizQuestion[]> = {
         d: 'Jika p = 12 dan e = 10, q = +2, bukan −2.',
         e: 'Angka 2 pada Mg²⁺ menyatakan besar muatan; magnesium kehilangan dua elektron dari 12 menjadi 10.',
       },
+    },
+  ],
+};
+
+export const ESSAY_QUESTIONS: Record<TopicId, EssayQuestion[]> = {
+  t1: [
+    {
+      id: 't1-essay-1',
+      number: 1,
+      prompt: 'Atom merupakan partikel terkecil penyusun suatu unsur yang masih memiliki sifat unsur tersebut. Jelaskan struktur dasar atom dengan menyebutkan tiga partikel subatom penyusunnya, letak masing-masing partikel, serta muatan listriknya!',
+    },
+    {
+      id: 't1-essay-2',
+      number: 2,
+      prompt: 'Seorang peserta didik mengamati ilustrasi model atom yang menunjukkan adanya inti atom dan elektron yang berada di sekitarnya. Menurut pemahamanmu, mengapa sebagian besar massa atom terkonsentrasi pada inti atom, sedangkan elektron berada di luar inti? Jelaskan berdasarkan karakteristik partikel penyusun atom!',
+    },
+  ],
+  t2: [
+    {
+      id: 't2-essay-3',
+      number: 3,
+      prompt: 'Suatu atom unsur X memiliki nomor atom 17 dan nomor massa 35. Tentukan jumlah proton, elektron, dan neutron dalam atom tersebut! Jelaskan langkah-langkah yang kamu gunakan untuk memperoleh setiap jumlah partikel tersebut!',
+    },
+    {
+      id: 't2-essay-4',
+      number: 4,
+      prompt: 'Unsur karbon memiliki dua isotop, yaitu karbon-12 dan karbon-14. Kedua isotop tersebut memiliki nomor atom yang sama, tetapi nomor massanya berbeda. Jelaskan mengapa kedua atom tersebut tetap termasuk unsur karbon dan apa yang menyebabkan perbedaan nomor massanya!',
+    },
+  ],
+  t3: [
+    {
+      id: 't3-essay-5',
+      number: 5,
+      prompt: 'Atom magnesium (Mg) memiliki nomor atom 12. Ketika membentuk ion Mg²⁺, atom tersebut melepaskan sejumlah elektron. Jelaskan proses pembentukan ion Mg²⁺ serta tentukan jumlah proton, elektron, dan muatan yang dimiliki ion tersebut!',
+    },
+    {
+      id: 't3-essay-6',
+      number: 6,
+      prompt: 'Perhatikan dua proses pembentukan ion berikut:\n\n- Atom natrium (Na) melepaskan 1 elektron menjadi Na⁺.\n- Atom oksigen (O) menerima 2 elektron menjadi O²⁻.\n\nJelaskan perbedaan proses pembentukan kedua ion tersebut berdasarkan perubahan jumlah elektron, muatan ion yang terbentuk, dan hubungannya dengan kestabilan konfigurasi elektron!',
     },
   ],
 };
