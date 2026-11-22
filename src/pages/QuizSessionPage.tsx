@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
-import { QUIZ_QUESTIONS } from '../data/quizQuestions';
+import { ESSAY_QUESTIONS, QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
 import { saveQuizAttempt, saveStudentActivity } from '../lib/firebase-db';
 import { recordClassroomQuiz, recordStudentActivity, type TrackedQuizResult, type StudentActivity } from '../lib/classroom';
@@ -11,6 +11,7 @@ import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock
 
 interface SavedQuizSession {
   answers: Record<string, string>;
+  essayAnswers: Record<string, string>;
   submitted: boolean;
 }
 
@@ -18,19 +19,31 @@ function quizStorageKey(topicId: TopicId) {
   return `atomika-quiz-${topicId}-v1`;
 }
 
+function readStringRecord(value: unknown): Record<string, string> {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return {};
+  return Object.fromEntries(
+    Object.entries(value).filter((entry): entry is [string, string] => typeof entry[1] === 'string')
+  );
+}
+
 function readQuizSession(topicId: TopicId): SavedQuizSession {
   try {
     const raw = window.localStorage.getItem(quizStorageKey(topicId));
-    if (!raw) return { answers: {}, submitted: false };
+    if (!raw) return { answers: {}, essayAnswers: {}, submitted: false };
 
     const saved = JSON.parse(raw) as Partial<SavedQuizSession>;
+    const answers = readStringRecord(saved.answers);
+    const essayAnswers = readStringRecord(saved.essayAnswers);
     return {
-      answers: saved.answers && typeof saved.answers === 'object' ? saved.answers : {},
-      submitted: saved.submitted === true,
+      answers,
+      essayAnswers,
+      submitted:
+        saved.submitted === true &&
+        ESSAY_QUESTIONS[topicId].every((question) => essayAnswers[question.id]?.trim()),
     };
   } catch (error) {
     console.error('Gagal membaca jawaban kuis:', error);
-    return { answers: {}, submitted: false };
+    return { answers: {}, essayAnswers: {}, submitted: false };
   }
 }
 
@@ -100,9 +113,15 @@ export function QuizSessionPage() {
 function QuizSession({ topic }: { topic: Topic }) {
   const { profile } = useAccess();
   const questions = QUIZ_QUESTIONS[topic.id];
+  const essayQuestions = ESSAY_QUESTIONS[topic.id];
   const [session, setSession] = useState(() => readQuizSession(topic.id));
   const [storageAvailable, setStorageAvailable] = useState(true);
   const answeredCount = questions.filter((question) => session.answers[question.id]).length;
+  const answeredEssayCount = essayQuestions.filter(
+    (question) => session.essayAnswers[question.id]?.trim()
+  ).length;
+  const allQuestionsAnswered =
+    answeredCount === questions.length && answeredEssayCount === essayQuestions.length;
   const correctCount = questions.filter(
     (question) => session.answers[question.id] === question.correct
   ).length;
@@ -117,8 +136,18 @@ function QuizSession({ topic }: { topic: Topic }) {
     setStorageAvailable(writeQuizSession(topic.id, nextSession));
   };
 
+  const writeEssayAnswer = (questionId: string, value: string) => {
+    if (session.submitted) return;
+    const nextSession = {
+      ...session,
+      essayAnswers: { ...session.essayAnswers, [questionId]: value },
+    };
+    setSession(nextSession);
+    setStorageAvailable(writeQuizSession(topic.id, nextSession));
+  };
+
   const submitQuiz = () => {
-    if (answeredCount !== questions.length || session.submitted) return;
+    if (!allQuestionsAnswered || session.submitted) return;
 
     const completedSession = { ...session, submitted: true };
     setStorageAvailable(writeQuizSession(topic.id, completedSession));
@@ -174,7 +203,7 @@ function QuizSession({ topic }: { topic: Topic }) {
   };
 
   const restartQuiz = () => {
-    const freshSession = { answers: {}, submitted: false };
+    const freshSession = { answers: {}, essayAnswers: {}, submitted: false };
     setSession(freshSession);
     setStorageAvailable(writeQuizSession(topic.id, freshSession));
   };
@@ -187,7 +216,7 @@ function QuizSession({ topic }: { topic: Topic }) {
           <span>Daftar Kuis</span>
         </Link>
         <span className="rounded-full bg-[#FFEDD5] px-3 py-1 text-xs font-semibold text-[#C2410C]">
-          {questions.length} Soal · Pilihan A–E
+          {questions.length} Pilihan Ganda · {essayQuestions.length} Esai
         </span>
       </div>
 
@@ -208,10 +237,10 @@ function QuizSession({ topic }: { topic: Topic }) {
               Kuis selesai
             </p>
             <p className="mt-1 text-sm text-green-900">
-              {correctCount} dari {questions.length} benar · Nilai {Math.round((correctCount / questions.length) * 100)}%
+              {correctCount} dari {questions.length} pilihan ganda benar · Nilai pilihan ganda {Math.round((correctCount / questions.length) * 100)}%
             </p>
-            <p className="mt-1 text-xs text-green-800">Jawaban benar, jawabanmu, dan pembahasan tersedia di setiap soal.</p>
-            <p className="mt-1 text-xs font-semibold text-emerald-800">✓ Nilai otomatis masuk ke rekap akun guru.</p>
+            <p className="mt-1 text-xs text-green-800">Jawaban dan pembahasan pilihan ganda tersedia di setiap soal. Jawaban esai tersimpan di perangkat ini dan tidak dinilai otomatis.</p>
+            <p className="mt-1 text-xs font-semibold text-emerald-800">✓ Nilai pilihan ganda masuk ke rekap akun guru.</p>
           </div>
           <button type="button" onClick={restartQuiz} className="inline-flex min-h-11 shrink-0 items-center justify-center gap-2 rounded-lg bg-[#C2410C] px-4 py-2 text-sm font-semibold text-white hover:bg-[#9A3412]">
             <RotateCcw className="h-4 w-4" aria-hidden="true" />
@@ -223,8 +252,8 @@ function QuizSession({ topic }: { topic: Topic }) {
       {!session.submitted && (
         <p className="rounded-lg border border-[#F1E5D8] bg-white px-4 py-3 text-sm text-[#475569]" role="status">
           {storageAvailable
-            ? `Pilihan tersimpan di perangkat ini. Jawaban dinilai setelah kuis dikirim. (${answeredCount}/${questions.length} terjawab)`
-            : 'Penyimpanan browser tidak tersedia. Pilihan tetap aktif selama halaman ini terbuka.'}
+            ? `Jawaban tersimpan di perangkat ini. (Pilihan ganda ${answeredCount}/${questions.length} · Esai ${answeredEssayCount}/${essayQuestions.length} terjawab)`
+            : 'Penyimpanan browser tidak tersedia. Jawaban tetap tersedia selama halaman ini terbuka.'}
         </p>
       )}
 
@@ -295,16 +324,50 @@ function QuizSession({ topic }: { topic: Topic }) {
         })}
       </div>
 
+      <section aria-labelledby="essay-heading" className="space-y-4">
+        <div>
+          <h2 id="essay-heading" className="text-xl font-bold text-[#172033]">Soal Esai</h2>
+          <p className="mt-1 text-sm leading-6 text-[#475569]">
+            Jawaban esai disimpan di browser ini dan tidak dinilai otomatis.
+          </p>
+        </div>
+        {essayQuestions.map((question) => {
+          const answered = Boolean(session.essayAnswers[question.id]?.trim());
+          return (
+            <section key={question.id} className="rounded-xl border border-[#F1E5D8] bg-white p-5 shadow-xs sm:p-6">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <label htmlFor={question.id} className="text-xs font-bold uppercase tracking-wide text-[#C2410C]">
+                  Soal Esai {question.number}
+                </label>
+                <span className={`text-xs font-semibold ${answered ? 'text-green-700' : 'text-[#64748B]'}`}>
+                  {answered ? 'Sudah dijawab' : 'Belum dijawab'}
+                </span>
+              </div>
+              <p className="whitespace-pre-line text-sm font-medium leading-6 text-[#172033]">{question.prompt}</p>
+              <textarea
+                id={question.id}
+                value={session.essayAnswers[question.id] ?? ''}
+                onChange={(event) => writeEssayAnswer(question.id, event.target.value)}
+                disabled={session.submitted}
+                rows={6}
+                placeholder="Tuliskan jawabanmu di sini..."
+                className="mt-4 min-h-36 w-full resize-y rounded-lg border border-[#F1E5D8] bg-[#FFFDFC] px-3 py-3 text-sm leading-6 text-[#172033] placeholder:text-[#94A3B8] focus:border-[#C2410C] focus:outline-none focus:ring-2 focus:ring-[#C2410C]/20 disabled:bg-slate-50"
+              />
+            </section>
+          );
+        })}
+      </section>
+
       {!session.submitted && (
         <div className="flex flex-col items-start gap-3 border-t border-[#F1E5D8] pt-5 sm:flex-row sm:items-center sm:justify-between">
           <p className="text-sm text-[#475569]">
-            {answeredCount === questions.length
-              ? 'Semua pilihan tersimpan. Kirim kuis untuk melihat hasil dan pembahasan.'
-              : `Lengkapi ${questions.length - answeredCount} soal lagi sebelum mengirim.`}
+            {allQuestionsAnswered
+              ? 'Semua pilihan ganda dan esai terjawab. Kirim kuis untuk melihat hasil pilihan ganda.'
+              : `Lengkapi ${questions.length - answeredCount} pilihan ganda dan ${essayQuestions.length - answeredEssayCount} esai lagi sebelum mengirim.`}
           </p>
           <button
             type="button"
-            disabled={answeredCount !== questions.length}
+            disabled={!allQuestionsAnswered}
             onClick={submitQuiz}
             className="inline-flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-[#C2410C] px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:bg-slate-300 sm:w-auto"
           >
@@ -315,7 +378,7 @@ function QuizSession({ topic }: { topic: Topic }) {
       )}
 
       <p className="border-t border-[#F1E5D8] pt-4 text-xs text-[#64748B]">
-        Nilai dan jawaban tersimpan secara lokal di browser pada perangkat ini.
+        Nilai dan jawaban pilihan ganda serta esai tersimpan secara lokal di browser pada perangkat ini.
       </p>
     </div>
   );
