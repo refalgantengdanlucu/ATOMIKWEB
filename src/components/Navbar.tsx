@@ -1,5 +1,5 @@
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LogOut, LogIn, ArrowRight } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Sparkles, Users, LogOut, LogIn, ArrowRight } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 interface NavItem {
@@ -19,7 +19,6 @@ const NAV_ITEMS: NavItem[] = [
     aliases: ['/lab'],
   },
   { to: '/kuis', label: 'Kuis', icon: HelpCircle },
-  { to: '/progres', label: 'Progres', icon: Award },
   {
     to: '/kelas',
     label: 'Kegiatan Kelas',

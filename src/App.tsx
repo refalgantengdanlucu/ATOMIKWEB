@@ -9,7 +9,6 @@ import { MateriDetailPage } from './pages/MateriDetailPage';
 import { LaboratoriumPage } from './pages/LaboratoriumPage';
 import { QuizListPage } from './pages/QuizListPage';
 import { QuizSessionPage } from './pages/QuizSessionPage';
-import { ProgressPage } from './pages/ProgressPage';
 import { ClassroomToolsPage } from './pages/ClassroomToolsPage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthPage } from './pages/AuthPage';
@@ -66,7 +65,6 @@ function ProtectedApp() {
           <Route path="/lab/:mode" element={<LaboratoriumPage />} />
           <Route path="/kuis" element={<QuizListPage />} />
           <Route path="/kuis/:topicId" element={<QuizSessionPage />} />
-          <Route path="/progres" element={<ProgressPage />} />
           <Route path="/kelas" element={<ClassroomToolsPage />} />
           <Route path="/dashboard" element={<Navigate to="/kelas" replace />} />
           <Route path="/guru" element={<Navigate to="/kelas" replace />} />

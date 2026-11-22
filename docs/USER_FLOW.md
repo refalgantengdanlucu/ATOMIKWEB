@@ -42,10 +42,8 @@ Dokumen ini memetakan perjalanan pengguna (*User Flow*) siswa SMA/MA Kelas X dal
   └── Melihat rangkuman skor (tersimpan nilai terbaik & terakhir)
             │  (Tercatat di quizResults)
             ▼
-[ Pantau Capaian di Halaman Progres (/progres) ]
-  ├── Cek status 3 Topik (Belum / Sedang / Selesai)
-  ├── Tombol "Lanjutkan" ke materi terakhir
-  └── Opsi Reset Progres dengan Dialog Konfirmasi
+[ Nilai kuis dan status penyelesaian materi tersimpan secara internal ]
+  └── Data digunakan untuk menghitung nilai dan membuka paket kuis
 ```
 
 ---

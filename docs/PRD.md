@@ -228,16 +228,15 @@ Aturan gambar inti: jika A ≤ 24 gambar semua nukleon; jika A > 24 gambar maksi
 
 | Rute | Halaman | Isi utama |
 |---|---|---|
-| `/` | Beranda | Hero + tombol Mulai Belajar, 3 `TopicCard`, pintasan Lab dan Kuis, ringkasan progres, info penyimpanan lokal |
+| `/` | Beranda | Hero + tombol Mulai Belajar, pintasan ke fitur, info penyimpanan lokal |
 | `/materi` | Daftar materi | `SearchBar`, `SearchResults`, daftar 3 topik |
 | `/materi/:topicId?s=:sectionId` | Materi topik | Bagian materi, ilustrasi, contoh, ringkasan, tombol ke latihan terkait |
 | `/lab/:mode` | Laboratorium | Tab Partikel, Kalkulator, Ion |
 | `/kuis` | Pilih paket | 3 paket, jumlah soal, aturan nilai |
 | `/kuis/:topicId` | Mengerjakan kuis | Soal, `FeedbackPanel`, `QuizResult` |
-| `/progres` | Progres belajar | `ProgressOverview`, reset |
 | `*` | 404 | Pesan dan tombol ke Beranda |
 
-Navigasi utama: Beranda, Materi, Laboratorium Atom, Kuis, Progres Belajar. Pada ponsel berupa menu ringkas/tab bawah dengan label teks.
+Navigasi utama: Beranda, Materi, Laboratorium Atom, Kuis, dan Kegiatan Kelas. Pada ponsel berupa menu ringkas/tab dengan label teks. Data progres tetap digunakan secara internal untuk pencatatan hasil kuis dan pembukaan paket kuis.
 
 ---
 
