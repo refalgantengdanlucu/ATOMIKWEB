@@ -14,7 +14,7 @@ export function LandingCta() {
         aria-hidden="true"
       />
 
-      <div className="relative z-10 max-w-2xl mx-auto space-y-5">
+      <div data-scroll-stagger className="relative z-10 max-w-2xl mx-auto space-y-5">
         {/* Badge */}
         <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-white/90 text-[#C2410C] border border-[#F97316]/20 shadow-2xs">
           <Sparkles className="w-3.5 h-3.5 text-[#F97316]" aria-hidden="true" />
@@ -35,7 +35,7 @@ export function LandingCta() {
         <div className="pt-3 flex justify-center">
           <Link
             to="/materi"
-            className="inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] active:scale-98 text-white font-semibold text-base shadow-lg shadow-orange-950/20 transition-all min-h-[48px]"
+            className="inline-flex items-center justify-center gap-2.5 px-8 py-3.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold text-base shadow-lg shadow-orange-950/20 transition-all min-h-[48px]"
           >
             <span>Mulai Belajar Sekarang</span>
             <ArrowRight className="w-5 h-5" aria-hidden="true" />

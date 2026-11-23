@@ -63,7 +63,7 @@ export function HomeHero() {
         {/* Kolom Kiri: Copy & CTA */}
         <div className="lg:col-span-7 space-y-5">
           {/* Badge Kurikulum */}
-          <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FFEDD5] text-[#C2410C] border border-[#F97316]/20">
+          <div data-scroll-reveal className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FFEDD5] text-[#C2410C] border border-[#F97316]/20">
             <span className="w-2 h-2 rounded-full bg-[#F97316] animate-pulse" />
             <span>Media Pembelajaran Kimia Fase E • Kelas X</span>
           </div>
@@ -77,15 +77,15 @@ export function HomeHero() {
           </h1>
 
           {/* Deskripsi */}
-          <p className="text-base sm:text-lg text-[#475569] leading-relaxed max-w-xl">
+          <p data-scroll-reveal className="text-base sm:text-lg text-[#475569] leading-relaxed max-w-xl">
             Bukan sekadar menghafal rumus. Eksplorasi proton, neutron, dan elektron secara visual, pahami notasi atom, serta amati pembentukan ion melalui laboratorium interaktif.
           </p>
 
           {/* Action Buttons */}
-          <div className="pt-2 flex flex-wrap items-center gap-3.5 sm:gap-4">
+          <div data-scroll-reveal className="pt-2 flex flex-wrap items-center gap-3.5 sm:gap-4">
             <Link
               to="/materi"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] active:scale-98 text-white font-semibold text-base shadow-md shadow-orange-950/15 transition-all min-h-[44px]"
+              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold text-base shadow-md shadow-orange-950/15 transition-all min-h-[44px]"
             >
               <span>Mulai Belajar</span>
               <ArrowRight className="w-5 h-5" aria-hidden="true" />
@@ -101,7 +101,7 @@ export function HomeHero() {
           </div>
 
           {/* Value Badges */}
-          <div className="pt-4 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-[#475569]">
+          <div data-scroll-stagger className="pt-4 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-[#475569]">
             <div className="flex items-center gap-1.5">
               <CheckCircle2 className="w-4 h-4 text-[#15803D]" aria-hidden="true" />
               <span>Sesuai Alur Tujuan Pembelajaran</span>
@@ -115,7 +115,7 @@ export function HomeHero() {
 
         {/* Kolom Kanan: Card Visual Laboratorium Atom */}
         <div className="lg:col-span-5 flex justify-center">
-          <div className="w-full max-w-md rounded-2xl bg-[#FFF8F0] border border-[#F1E5D8] p-5 sm:p-6 shadow-inner text-center">
+          <div data-scroll-reveal className="w-full max-w-md rounded-2xl bg-[#FFF8F0] border border-[#F1E5D8] p-5 sm:p-6 shadow-inner text-center">
             {/* Header Card Simulasi */}
             <div className="flex items-center justify-between pb-3 border-b border-[#F1E5D8] text-xs">
               <div className="flex items-center gap-2 font-bold text-[#172033]">
@@ -274,7 +274,7 @@ export function HomeHero() {
       </div>
 
       {/* Micro-Stats Bar di Bawah Hero (Persis seperti layout IMF Explorer) */}
-      <div className="mt-10 pt-6 border-t border-[#F1E5D8] grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
+      <div data-scroll-stagger className="mt-10 pt-6 border-t border-[#F1E5D8] grid grid-cols-2 md:grid-cols-4 gap-4 text-center">
         <div className="p-3 rounded-xl bg-[#FFF8F0]/70 border border-[#F1E5D8]/80">
           <div className="flex items-center justify-center gap-1.5 text-[#C2410C] font-extrabold text-lg sm:text-xl">
             <BookOpen className="w-5 h-5 text-[#F97316]" aria-hidden="true" />

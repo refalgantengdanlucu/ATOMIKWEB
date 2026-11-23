@@ -17,6 +17,7 @@ import {
 import { doc, setDoc } from 'firebase/firestore';
 import { useAccess } from '../lib/access-context';
 import { applySessionPersistence, auth, db, getRememberSession, isFirebaseConfigured, setRememberSession } from '../lib/firebase';
+import { SkeletonBlock } from '../components/Skeleton';
 import './AuthPage.css';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password';
@@ -141,6 +142,7 @@ export function AuthPage() {
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const routeNotice = (location.state as { notice?: string } | null)?.notice ?? '';
+  const checkingResetCode = Boolean(isReset && resetCode && auth && isFirebaseConfigured && !error);
 
   const strength = useMemo(() => passwordStrength(password), [password]);
 
@@ -282,7 +284,25 @@ export function AuthPage() {
   };
 
   if (status === 'loading') {
-    return <main className="auth-page"><div className="auth-loading">Memulihkan sesi...</div></main>;
+    return (
+      <main className="auth-page">
+        <section className="auth-card" role="status" aria-busy="true">
+          <span className="sr-only">Memulihkan sesi...</span>
+          <div className="mb-7 flex items-center gap-3">
+            <SkeletonBlock className="h-12 w-12 shrink-0 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-4 w-32 rounded" />
+              <SkeletonBlock className="h-3 w-44 max-w-full rounded" />
+            </div>
+          </div>
+          <SkeletonBlock className="mb-3 h-7 w-3/4 rounded" />
+          <SkeletonBlock className="mb-8 h-4 w-full rounded" />
+          <SkeletonBlock className="mb-4 h-12 w-full rounded-xl" />
+          <SkeletonBlock className="mb-4 h-12 w-full rounded-xl" />
+          <SkeletonBlock className="h-12 w-full rounded-xl" />
+        </section>
+      </main>
+    );
   }
 
   if (isReset && !resetCodeValid) {
@@ -291,12 +311,23 @@ export function AuthPage() {
         <section className="auth-card">
           <Brand />
           <div className="auth-heading">
-            <h1>{resetCode && isFirebaseConfigured ? 'Memeriksa tautan reset...' : 'Tautan tidak tersedia'}</h1>
-            <p>{!isFirebaseConfigured
-              ? 'Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.'
-              : resetCode
-                ? 'Tautan pemulihan sedang diperiksa.'
-                : 'Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.'}</p>
+            {checkingResetCode ? (
+              <div role="status" aria-busy="true" className="space-y-3">
+                <span className="sr-only">Memeriksa tautan reset...</span>
+                <SkeletonBlock className="h-8 w-56 max-w-full rounded" />
+                <SkeletonBlock className="h-4 w-full rounded" />
+                <SkeletonBlock className="h-4 w-4/5 rounded" />
+              </div>
+            ) : (
+              <>
+                <h1>Tautan tidak tersedia</h1>
+                <p>{!isFirebaseConfigured
+                  ? 'Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.'
+                  : resetCode
+                    ? 'Tautan pemulihan tidak dapat diverifikasi. Periksa koneksi, lalu minta tautan baru.'
+                    : 'Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.'}</p>
+              </>
+            )}
           </div>
           {error && <div className="auth-message auth-message-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
           {!resetCode && isFirebaseConfigured && <Link className="auth-secondary-button" to="/forgot-password">Minta tautan baru</Link>}
@@ -451,8 +482,13 @@ export function AuthPage() {
             </div>
           )}
 
-          <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured}>
-            {busy ? 'Memproses...' : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
+          <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured} aria-busy={busy}>
+            {busy ? (
+              <>
+                <span className="sr-only">Memproses...</span>
+                <SkeletonBlock className="skeleton-on-brand h-3.5 w-24 rounded" />
+              </>
+            ) : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
           </button>
         </form>
 

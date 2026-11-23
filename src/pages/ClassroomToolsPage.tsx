@@ -26,6 +26,7 @@ import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, Stude
 import { useAccess } from '../lib/access-context';
 import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
 import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
+import { SkeletonBlock, SkeletonTable } from '../components/Skeleton';
 import {
   saveAttendance,
   savePollResponse,
@@ -668,10 +669,23 @@ function TeacherDashboard({
       {activeTab === 'quiz' && (
         <div className={panelClass}>
           <div className="mb-5 flex items-center justify-between gap-3">
-            <div><h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3><p className="text-sm text-[#64748B]">{allQuizResults.length} pengerjaan tersimpan · terbaru dahulu {sheetsLoading && '· menyegarkan...'}</p></div>
+            <div>
+              <h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3>
+              <p className="flex items-center gap-2 text-sm text-[#64748B]">
+                {allQuizResults.length} pengerjaan tersimpan · terbaru dahulu
+                {sheetsLoading && (
+                  <span role="status" aria-busy="true">
+                    <span className="sr-only">Menyegarkan data...</span>
+                    <SkeletonBlock className="h-3 w-16 rounded" />
+                  </span>
+                )}
+              </p>
+            </div>
             <Users className="h-5 w-5 text-[#F97316]" aria-hidden="true" />
           </div>
-          {allQuizResults.length ? (
+          {sheetsLoading && allQuizResults.length === 0 ? (
+            <SkeletonTable columns={4} minWidthClassName="min-w-[540px]" />
+          ) : allQuizResults.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[540px] text-left text-sm">
                 <thead className="border-b border-[#F1E5D8] text-xs uppercase text-[#64748B]"><tr><th className="px-3 py-3">Nama</th><th className="px-3 py-3">Kelas</th><th className="px-3 py-3">Skor / Nilai</th><th className="px-3 py-3">Tanggal & waktu</th></tr></thead>
@@ -730,10 +744,22 @@ function TeacherDashboard({
       {activeTab === 'progress' && (
         <div className={panelClass}>
           <div className="mb-5"><h3 className="text-lg font-bold text-[#172033]">Progres laporan praktikum</h3><p className="text-sm text-[#64748B]">Diurutkan dari tahap paling sedikit selesai</p></div>
-          {allProgress.length ? (
+          {sheetsLoading && allProgress.length === 0 ? (
+            <div className="grid gap-3 md:grid-cols-2" role="status" aria-busy="true">
+              <span className="sr-only">Memuat progres siswa...</span>
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="rounded-2xl border border-[#F1E5D8] p-4">
+                  <SkeletonBlock className="h-4 w-40 max-w-full rounded" />
+                  <SkeletonBlock className="mt-4 h-3 w-3/4 rounded" />
+                  <SkeletonBlock className="mt-2 h-3 w-1/2 rounded" />
+                  <SkeletonBlock className="mt-4 h-3 w-2/3 rounded" />
+                </div>
+              ))}
+            </div>
+          ) : allProgress.length ? (
             <div className="space-y-3">
               {allProgress.map((student) => (
-                <article key={`${normalizeStudentName(student.name)}|${normalizeStudentName(student.className ?? '')}`} className="rounded-2xl border border-[#F1E5D8] p-4">
+                <article data-card-hover key={`${normalizeStudentName(student.name)}|${normalizeStudentName(student.className ?? '')}`} className="rounded-2xl border border-[#F1E5D8] p-4">
                   <div className="flex flex-wrap items-center justify-between gap-2">
                     <h4 className="font-bold text-[#172033]">{student.name}{student.className && <span className="ml-2 text-xs font-medium text-[#64748B]">{student.className}</span>}</h4>
                     <span className="text-xs font-bold text-[#9A3412]">{student.completedStages.length} dari {PROGRESS_STAGES.length} tahap</span>
@@ -760,8 +786,15 @@ function TeacherDashboard({
             </div>
             <span className="rounded-full bg-orange-50 px-3 py-1 text-xs font-bold text-[#9A3412]">{latestActivities.length} siswa</span>
           </div>
-          {sheetsLoading && <p className="mb-3 text-xs text-[#64748B]">Memuat aktivitas dari spreadsheet…</p>}
-          {latestActivities.length ? (
+          {sheetsLoading && latestActivities.length > 0 && (
+            <div className="mb-3" role="status" aria-busy="true">
+              <span className="sr-only">Memuat aktivitas dari spreadsheet...</span>
+              <SkeletonBlock className="h-3 w-40 rounded" />
+            </div>
+          )}
+          {sheetsLoading && latestActivities.length === 0 ? (
+            <SkeletonTable columns={5} minWidthClassName="min-w-[700px]" />
+          ) : latestActivities.length ? (
             <div className="overflow-x-auto">
               <table className="w-full min-w-[700px] text-left text-sm">
                 <thead className="border-b border-[#F1E5D8] text-xs uppercase text-[#64748B]">

@@ -27,7 +27,7 @@ export function LandingKeunggulan() {
   return (
     <section className="space-y-6 mb-16">
       {/* Section Header */}
-      <div className="text-center max-w-2xl mx-auto space-y-2">
+      <div data-scroll-reveal className="text-center max-w-2xl mx-auto space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFEDD5] text-[#C2410C] border border-[#F97316]/20">
           <Sparkles className="w-3.5 h-3.5 text-[#F97316]" aria-hidden="true" />
           <span>Keunggulan Media</span>
@@ -41,12 +41,13 @@ export function LandingKeunggulan() {
       </div>
 
       {/* 4 Cards Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
+      <div data-scroll-stagger className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">
         {ADVANTAGES.map((adv, idx) => {
           const Icon = adv.icon;
           return (
             <div
               key={idx}
+              data-card-hover
               className="rounded-2xl bg-white border border-[#F1E5D8] p-5 sm:p-6 shadow-xs hover:border-[#F97316]/40 hover:shadow-md transition-all space-y-3 group"
             >
               <div className="w-10 h-10 rounded-xl bg-[#FFF8F0] border border-[#F1E5D8] flex items-center justify-center text-[#C2410C] group-hover:bg-[#FFEDD5] group-hover:scale-105 transition-all">

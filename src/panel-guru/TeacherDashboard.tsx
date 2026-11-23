@@ -14,6 +14,7 @@ import {
   type AttemptFeed,
   type TeacherQuizAttempt,
 } from './quizAttempts';
+import { SkeletonBlock } from '../components/Skeleton';
 
 const EMPTY_FEED: AttemptFeed = {
   status: 'loading',
@@ -163,7 +164,13 @@ export function TeacherDashboard() {
 
       <section className="rounded-2xl border border-[#F1E5D8] bg-white p-4 sm:p-6" aria-labelledby="data-status-title">
         <h2 id="data-status-title" className="text-lg font-bold text-[#172033]">Status data</h2>
-        {feed.status === 'loading' && <p className="mt-2 text-sm text-[#475569]" role="status">Memuat hasil yang telah diterima server...</p>}
+        {feed.status === 'loading' && (
+          <div className="mt-3 space-y-2" role="status" aria-busy="true">
+            <span className="sr-only">Memuat hasil yang telah diterima server...</span>
+            <SkeletonBlock className="h-4 w-48 rounded" />
+            <SkeletonBlock className="h-3 w-32 rounded" />
+          </div>
+        )}
         {feed.status === 'empty' && (
           <p className="mt-2 text-sm leading-6 text-[#475569]" role="status">
             Belum ada hasil kuis yang diterima server. Panel kosong tidak berarti siswa belum belajar.
@@ -226,12 +233,25 @@ export function TeacherDashboard() {
         )}
 
         <div className="grid min-w-0 gap-3">
+          {feed.status === 'loading' && (
+            <div className="space-y-3" role="status" aria-busy="true">
+              <span className="sr-only">Memuat daftar hasil...</span>
+              {Array.from({ length: 3 }, (_, index) => (
+                <div key={index} className="rounded-xl border border-[#F1E5D8] bg-white p-4 sm:p-5">
+                  <SkeletonBlock className="h-4 w-40 max-w-full rounded" />
+                  <SkeletonBlock className="mt-3 h-3.5 w-3/4 rounded" />
+                  <SkeletonBlock className="mt-2 h-3.5 w-1/2 rounded" />
+                </div>
+              ))}
+            </div>
+          )}
           {filteredAttempts.map((attempt) => {
             const verifiedScore = calculateVerifiedScore(attempt);
             return (
               <button
                 key={attempt.id}
                 type="button"
+                data-card-hover
                 onClick={() => setSelectedId(attempt.id)}
                 aria-pressed={selectedId === attempt.id}
                 className={`min-w-0 rounded-xl border bg-white p-4 text-left transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C2410C] sm:p-5 ${
@@ -282,7 +302,7 @@ export function TeacherDashboard() {
           const groupId = `${group.moduleId}-${group.activityName}-${group.attemptType}-${group.questionVersion ?? 'unversioned'}`;
 
           return (
-            <article key={groupId} className="min-w-0 rounded-2xl border border-[#F1E5D8] bg-white p-4 sm:p-6">
+            <article data-card-hover key={groupId} className="min-w-0 rounded-2xl border border-[#F1E5D8] bg-white p-4 sm:p-6">
               <h3 className="break-words text-lg font-bold text-[#172033]">{group.activityName}</h3>
               <p className="mt-1 break-words text-sm leading-6 text-[#475569]">
                 {moduleLabel(group.moduleId)} · {attemptTypeLabel(group.attemptType)} · Versi {group.questionVersion ?? 'tidak tercatat'}

@@ -35,6 +35,7 @@ export function TopicCard({
 
   return (
     <article
+      data-card-hover={!isLocked ? '' : undefined}
       className={`flex flex-col justify-between rounded-2xl border p-6 shadow-xs transition-shadow
         ${
           isLocked

@@ -77,7 +77,7 @@ export function ProgressPage() {
             const { completedCount, totalCount, percent } = getTopicCompletion(topic.id);
 
             return (
-              <article key={topic.id} className={`flex flex-col rounded-2xl border p-5 shadow-xs ${
+              <article key={topic.id} data-card-hover={unlocked ? '' : undefined} className={`flex flex-col rounded-2xl border p-5 shadow-xs ${
                 unlocked ? 'border-[#F1E5D8] bg-white' : 'border-slate-200 bg-slate-50'
               }`}>
                 <div className="flex items-start justify-between gap-3">
@@ -133,7 +133,7 @@ export function ProgressPage() {
             const href = `/laboratorium/${mode.id}`;
 
             return (
-              <article key={mode.id} className={`flex flex-col rounded-2xl border p-5 ${
+              <article key={mode.id} data-card-hover={laboratoryUnlocked ? '' : undefined} className={`flex flex-col rounded-2xl border p-5 ${
                 laboratoryUnlocked ? 'border-[#F1E5D8] bg-white' : 'border-slate-200 bg-slate-50'
               }`}>
                 <div className="flex items-center justify-between gap-3">
@@ -179,7 +179,7 @@ export function ProgressPage() {
               : `Kirim Kuis ${index} untuk membuka tahap ini.`;
 
             return (
-              <article key={topic.id} className={`flex flex-col rounded-2xl border p-5 ${
+              <article key={topic.id} data-card-hover={unlocked ? '' : undefined} className={`flex flex-col rounded-2xl border p-5 ${
                 unlocked ? 'border-[#F1E5D8] bg-white' : 'border-slate-200 bg-slate-50'
               }`}>
                 <div className="flex items-start justify-between gap-3">

@@ -58,6 +58,7 @@ export function QuizListPage() {
           return (
             <div
               key={topic.id}
+              data-card-hover={unlocked ? '' : undefined}
               className={`flex flex-col justify-between p-6 rounded-2xl border shadow-xs transition-shadow ${
                 unlocked ? 'bg-white border-[#F1E5D8]' : 'bg-slate-50 border-slate-200 opacity-85'
               }`}

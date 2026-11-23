@@ -11,6 +11,7 @@ import { SECTIONS } from '../data/sections';
 import type { AccessProfile } from '../lib/access-context';
 import { useProgress } from '../lib/progress';
 import type { TopicId } from '../types';
+import { SkeletonBlock } from './Skeleton';
 
 export function AccessGate({ children }: { children: ReactNode }) {
   const { profile, status } = useAccess();
@@ -23,8 +24,21 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
   if (status === 'loading') {
     return (
-      <main className="flex min-h-screen items-center justify-center bg-[#FFF8F0] text-[#475569]" aria-live="polite">
-        Memulihkan sesi...
+      <main className="flex min-h-screen items-center justify-center bg-[#FFF8F0] px-4" aria-live="polite" aria-busy="true">
+        <section className="w-full max-w-md rounded-3xl border border-[#F1E5D8] bg-white p-6 shadow-sm sm:p-9" role="status">
+          <span className="sr-only">Memulihkan sesi...</span>
+          <div className="mb-5 flex items-center gap-3">
+            <SkeletonBlock className="h-12 w-12 shrink-0 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-5 w-36 rounded" />
+              <SkeletonBlock className="h-3 w-48 max-w-full rounded" />
+            </div>
+          </div>
+          <SkeletonBlock className="mb-3 h-6 w-3/4 rounded" />
+          <SkeletonBlock className="mb-2 h-4 w-full rounded" />
+          <SkeletonBlock className="mb-6 h-4 w-5/6 rounded" />
+          <SkeletonBlock className="h-11 w-44 rounded-xl" />
+        </section>
       </main>
     );
   }

@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import { HomeHero } from '../components/HomeHero';
 import { LandingAlurBelajar } from '../components/LandingAlurBelajar';
 import { LandingLaboratorium } from '../components/LandingLaboratorium';
@@ -5,12 +6,15 @@ import { LandingKeunggulan } from '../components/LandingKeunggulan';
 import { LandingCta } from '../components/LandingCta';
 import { useAccess } from '../lib/access-context';
 import { StudentActivityReporter } from '../components/AccessGate';
+import { useHomepageScrollAnimations } from '../lib/useHomepageScrollAnimations';
 
 export function HomePage() {
   const { profile } = useAccess();
+  const pageRef = useRef<HTMLDivElement>(null);
+  useHomepageScrollAnimations(pageRef);
 
   return (
-    <div className="pb-12 space-y-12">
+    <div ref={pageRef} className="pb-12 space-y-12">
       {/* Jika siswa sudah login membuka beranda, laporkan aktivitasnya */}
       {profile && <StudentActivityReporter profile={profile} />}
 

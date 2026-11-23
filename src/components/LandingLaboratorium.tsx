@@ -47,7 +47,7 @@ export function LandingLaboratorium() {
   return (
     <section className="space-y-6 mb-16">
       {/* Section Header */}
-      <div className="text-center max-w-2xl mx-auto space-y-2">
+      <div data-scroll-reveal className="text-center max-w-2xl mx-auto space-y-2">
         <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-[#FFEDD5] text-[#C2410C] border border-[#F97316]/20">
           <FlaskConical className="w-3.5 h-3.5 text-[#F97316]" aria-hidden="true" />
           <span>Laboratorium Interaktif</span>
@@ -61,12 +61,13 @@ export function LandingLaboratorium() {
       </div>
 
       {/* Lab Features Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+      <div data-scroll-stagger className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {LAB_FEATURES.map((item) => {
           const Icon = item.icon;
           return (
             <div
               key={item.mode}
+              data-card-hover
               className="flex flex-col justify-between rounded-2xl bg-white border border-[#F1E5D8] p-6 shadow-xs hover:border-[#F97316]/40 hover:shadow-md transition-all duration-200 group"
             >
               <div className="space-y-4">

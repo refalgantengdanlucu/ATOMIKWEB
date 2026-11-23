@@ -147,6 +147,7 @@ export function MateriPage() {
                     {sectionUnlocked ? (
                       <Link
                         to={`/materi/${sec.topicId}?s=${sec.id}`}
+                        data-card-hover
                         className="p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] shadow-xs transition-all flex flex-col justify-between group"
                       >
                         <div>
