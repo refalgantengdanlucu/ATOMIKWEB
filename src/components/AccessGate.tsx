@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAccess } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
+import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import type { StudentActivity } from '../lib/classroom';
 import { sendActivityToSheets } from '../lib/classroom-sync';
 import { saveStudentActivity } from '../lib/firebase-db';
@@ -112,20 +113,13 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
     const currentActivity = blocked ? `${activity} · akses terkunci` : activity;
 
     const visitKey = `atomika-student-visits-v1:${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
-    let visitedSectionIds: string[] = [];
-    try {
-      const savedVisits = window.localStorage.getItem(visitKey);
-      visitedSectionIds = savedVisits ? JSON.parse(savedVisits) as string[] : [];
-    } catch (error) {
-      console.error('Gagal membaca progres topik siswa:', error);
-    }
+    const savedVisits = readJsonStorage<unknown>(visitKey, []);
+    let visitedSectionIds = Array.isArray(savedVisits.value)
+      ? savedVisits.value.filter((id): id is string => typeof id === 'string')
+      : [];
     if (sectionId && SECTIONS.some((item) => item.id === sectionId) && !visitedSectionIds.includes(sectionId)) {
       visitedSectionIds = [...visitedSectionIds, sectionId];
-      try {
-        window.localStorage.setItem(visitKey, JSON.stringify(visitedSectionIds));
-      } catch (error) {
-        console.error('Gagal menyimpan progres topik siswa:', error);
-      }
+      writeJsonStorage(visitKey, visitedSectionIds);
     }
     const progressSummary = TOPICS.map((topic, index) => {
       const count = topic.sectionIds.filter((id) => visitedSectionIds.includes(id)).length;

@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LocalProgress, TopicId } from '../types';
 import { TOPICS } from '../data/topics';
+import { readJsonStorage, writeJsonStorage } from './safe-storage';
 
 // ─────────────────────────────────────────────────────────
 // Kebijakan Namespace per Pengguna (AD17-05)
@@ -63,30 +64,20 @@ export type LabModeId = (typeof LAB_MODES)[number]['id'];
  * Tidak pernah membaca kunci pengguna lain.
  */
 export function getProgressForKey(storageKey: string): LocalProgress {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return DEFAULT_PROGRESS;
+  const { value: parsed } = readJsonStorage<Partial<LocalProgress> | null>(storageKey, null);
+  if (parsed && parsed.version === 1 && Array.isArray(parsed.visitedSectionIds)) {
+    return {
+      ...DEFAULT_PROGRESS,
+      ...parsed,
+      visitedSectionIds: parsed.visitedSectionIds,
+      labDone: {
+        ...DEFAULT_PROGRESS.labDone,
+        ...(parsed.labDone && typeof parsed.labDone === 'object' ? parsed.labDone : {}),
+      },
+      quizResults: parsed.quizResults || DEFAULT_PROGRESS.quizResults,
+    };
   }
-  try {
-    const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return DEFAULT_PROGRESS;
-    const parsed = JSON.parse(raw) as Partial<LocalProgress>;
-    if (parsed && parsed.version === 1 && Array.isArray(parsed.visitedSectionIds)) {
-      return {
-        ...DEFAULT_PROGRESS,
-        ...parsed,
-        visitedSectionIds: parsed.visitedSectionIds,
-        labDone: {
-          ...DEFAULT_PROGRESS.labDone,
-          ...(parsed.labDone && typeof parsed.labDone === 'object' ? parsed.labDone : {}),
-        },
-        quizResults: parsed.quizResults || DEFAULT_PROGRESS.quizResults,
-      };
-    }
-    return DEFAULT_PROGRESS;
-  } catch (err) {
-    console.warn(`[progress] Gagal membaca ${storageKey}:`, err);
-    return DEFAULT_PROGRESS;
-  }
+  return DEFAULT_PROGRESS;
 }
 
 /** Shorthand: baca dari kunci anonim (backward compat / demo). */
@@ -99,15 +90,16 @@ export function getProgress(): LocalProgress {
  * lalu memancarkan event reaktif.
  */
 export function saveProgressForKey(storageKey: string, progress: LocalProgress): void {
-  if (typeof window === 'undefined' || !window.localStorage) return;
-  try {
-    const updated: LocalProgress = { ...progress, updatedAt: new Date().toISOString() };
-    window.localStorage.setItem(storageKey, JSON.stringify(updated));
-    window.dispatchEvent(
-      new CustomEvent(PROGRESS_EVENT_NAME, { detail: { storageKey, progress: updated } })
-    );
-  } catch (err) {
-    console.error(`[progress] Gagal menyimpan ${storageKey}:`, err);
+  const updated: LocalProgress = { ...progress, updatedAt: new Date().toISOString() };
+  writeJsonStorage(storageKey, updated);
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(
+        new CustomEvent(PROGRESS_EVENT_NAME, { detail: { storageKey, progress: updated } }),
+      );
+    } catch (error) {
+      console.error(`[progress] Gagal memperbarui tampilan ${storageKey}:`, error);
+    }
   }
 }
 

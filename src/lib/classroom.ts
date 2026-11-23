@@ -1,3 +1,5 @@
+import { readJsonStorage, writeJsonStorage } from './safe-storage';
+
 export const TEACHER_PIN = '122333';
 export const CLASSROOM_STORAGE_KEYS = {
   quiz: 'atomika-classroom-quiz-v1',
@@ -144,22 +146,17 @@ export function getLocalDateKey(date: Date): string {
 }
 
 export function readClassroomData<T>(key: string, fallback: T): T {
-  try {
-    const raw = window.localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as T) : fallback;
-  } catch (error) {
-    console.error(`Gagal membaca data kelas (${key}):`, error);
-    return fallback;
-  }
+  return readJsonStorage(key, fallback).value;
 }
 
 export function writeClassroomData<T>(key: string, value: T): boolean {
-  try {
-    window.localStorage.setItem(key, JSON.stringify(value));
-    window.dispatchEvent(new CustomEvent('classroom-storage-update'));
-    return true;
-  } catch (error) {
-    console.error(`Gagal menyimpan data kelas (${key}):`, error);
-    return false;
+  const persisted = writeJsonStorage(key, value);
+  if (typeof window !== 'undefined') {
+    try {
+      window.dispatchEvent(new CustomEvent('classroom-storage-update'));
+    } catch (error) {
+      console.error(`Gagal memperbarui tampilan data kelas (${key}):`, error);
+    }
   }
+  return persisted;
 }

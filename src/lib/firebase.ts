@@ -6,6 +6,7 @@ import {
   setPersistence,
 } from 'firebase/auth';
 import { getFirestore } from 'firebase/firestore';
+import { getStorageItem, setStorageItem } from './safe-storage';
 
 function stripQuotes(value?: string) {
   return value?.trim().replace(/^["']|["']$/g, '');
@@ -43,21 +44,13 @@ export const db = firebaseApp ? getFirestore(firebaseApp) : null;
 const rememberSessionKey = 'atomika-remember-session-v1';
 
 export function setRememberSession(remember: boolean) {
-  try {
-    window.localStorage.setItem(rememberSessionKey, String(remember));
-  } catch (error) {
-    console.error('Preferensi sesi tidak dapat disimpan:', error);
+  if (!setStorageItem(rememberSessionKey, String(remember))) {
     throw new Error('Pengaturan sesi tidak dapat disimpan pada browser ini.');
   }
 }
 
 export function getRememberSession() {
-  try {
-    return window.localStorage.getItem(rememberSessionKey) === 'true';
-  } catch (error) {
-    console.error('Preferensi sesi tidak dapat dibaca:', error);
-    return false;
-  }
+  return getStorageItem(rememberSessionKey).value === 'true';
 }
 
 export async function applySessionPersistence() {

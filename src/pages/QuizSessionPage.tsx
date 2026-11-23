@@ -5,6 +5,7 @@ import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
 import { getProgress, saveProgress, isTopicCompleted } from '../lib/progress';
 import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
+import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock, ArrowRight } from 'lucide-react';
 
@@ -20,29 +21,18 @@ function quizStorageKey(topicId: TopicId) {
 }
 
 function readQuizSession(topicId: TopicId): SavedQuizSession {
-  try {
-    const raw = window.localStorage.getItem(quizStorageKey(topicId));
-    if (!raw) return { answers: {}, submitted: false };
-
-    const saved = JSON.parse(raw) as Partial<SavedQuizSession>;
-    return {
-      answers: saved.answers && typeof saved.answers === 'object' ? saved.answers : {},
-      submitted: saved.submitted === true,
-    };
-  } catch (error) {
-    console.error('Gagal membaca jawaban kuis:', error);
-    return { answers: {}, submitted: false };
-  }
+  const { value } = readJsonStorage<Partial<SavedQuizSession>>(
+    quizStorageKey(topicId),
+    { answers: {}, submitted: false },
+  );
+  return {
+    answers: value.answers && typeof value.answers === 'object' ? value.answers : {},
+    submitted: value.submitted === true,
+  };
 }
 
 function writeQuizSession(topicId: TopicId, session: SavedQuizSession): boolean {
-  try {
-    window.localStorage.setItem(quizStorageKey(topicId), JSON.stringify(session));
-    return true;
-  } catch (error) {
-    console.error('Gagal menyimpan jawaban kuis:', error);
-    return false;
-  }
+  return writeJsonStorage(quizStorageKey(topicId), session);
 }
 
 export function QuizSessionPage() {
