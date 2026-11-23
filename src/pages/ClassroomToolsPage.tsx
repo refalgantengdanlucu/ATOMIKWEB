@@ -43,7 +43,10 @@ const TABS: { id: ActivityTab; title: string; description: string; icon: typeof 
   { id: 'attendance', title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
   { id: 'progress', title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
 ];
-const TEACHER_TABS = [...TABS, { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users }];
+const TEACHER_TABS = [
+  ...TABS,
+  { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users },
+];
 
 const panelClass = 'rounded-3xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-8';
 const buttonClass = 'inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-bold text-white transition-colors hover:bg-[#9A3412] disabled:cursor-not-allowed disabled:opacity-50';

@@ -3,10 +3,10 @@ import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
-import { getProgress, saveProgress } from '../lib/progress';
+import { getProgress, saveProgress, isTopicCompleted } from '../lib/progress';
 import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
 import type { Topic, TopicId } from '../types';
-import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send } from 'lucide-react';
+import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock, ArrowRight } from 'lucide-react';
 
 interface SavedQuizSession {
   answers: Record<string, string>;
@@ -48,6 +48,7 @@ function writeQuizSession(topicId: TopicId, session: SavedQuizSession): boolean 
 export function QuizSessionPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const topic = TOPICS.find((t) => t.id === topicId);
+  const { profile } = useAccess();
 
   if (!topic) {
     return (
@@ -65,6 +66,30 @@ export function QuizSessionPage() {
         >
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />
           <span>Kembali ke Daftar Kuis</span>
+        </Link>
+      </div>
+    );
+  }
+
+  const isTeacher = profile?.role === 'teacher';
+  const isUnlocked = isTeacher || isTopicCompleted(topic.id as TopicId, getProgress().visitedSectionIds);
+
+  if (!isUnlocked) {
+    return (
+      <div className="py-16 text-center max-w-lg mx-auto">
+        <div className="w-14 h-14 rounded-full bg-amber-100 text-[#C2410C] flex items-center justify-center mx-auto mb-4">
+          <Lock className="w-7 h-7" aria-hidden="true" />
+        </div>
+        <h1 className="text-2xl font-bold text-[#172033]">Paket Kuis Masih Terkunci</h1>
+        <p className="mt-2 text-sm text-[#475569] leading-relaxed max-w-md mx-auto">
+          Kamu perlu membaca dan menyelesaikan seluruh bagian materi pada <strong>{topic.title}</strong> terlebih dahulu sebelum mengerjakan kuis evaluasi ini.
+        </p>
+        <Link
+          to={`/materi/${topic.id}`}
+          className="mt-6 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold text-sm shadow-sm transition-colors"
+        >
+          <span>Buka Materi {topic.title}</span>
+          <ArrowRight className="w-4 h-4" aria-hidden="true" />
         </Link>
       </div>
     );

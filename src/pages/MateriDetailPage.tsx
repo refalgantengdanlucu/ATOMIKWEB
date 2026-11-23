@@ -102,7 +102,9 @@ export function MateriDetailPage() {
         </div>
         <h1 className="text-2xl font-bold text-[#172033]">Topik Masih Terkunci</h1>
         <p className="mt-3 text-sm text-[#475569] leading-relaxed max-w-sm mx-auto">
-          Topik ini terkunci untuk akses siswa. Minta guru membuka akses melalui Dashboard Guru.
+          {topicId === 't2'
+            ? 'Selesaikan seluruh bagian di Topik 1 terlebih dahulu untuk membuka topik ini.'
+            : 'Selesaikan seluruh bagian di Topik 1 dan Topik 2 terlebih dahulu untuk membuka topik ini.'}
         </p>
         <Link to="/materi" className="mt-8 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm">
           <ArrowLeft className="w-4 h-4" aria-hidden="true" />

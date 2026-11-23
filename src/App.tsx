@@ -39,6 +39,15 @@ export default function App() {
           <Route path="/forgot-password" element={<AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
           <Route path="/panel-guru/*" element={<PanelGuruRoute />} />
+          {/* Landing Page Publik ATOMIKA (dapat diakses sebelum login) */}
+          <Route
+            path="/"
+            element={
+              <Layout>
+                <HomePage />
+              </Layout>
+            }
+          />
           <Route path="/*" element={<ProtectedApp />} />
         </Routes>
       </AccessProvider>
@@ -51,7 +60,6 @@ function ProtectedApp() {
     <AccessGate>
       <Layout>
         <Routes>
-          <Route path="/" element={<HomePage />} />
           <Route path="/materi" element={<MateriPage />} />
           <Route path="/materi/:topicId" element={<MateriDetailPage />} />
           <Route path="/laboratorium" element={<Navigate to="/laboratorium/partikel" replace />} />
@@ -62,6 +70,8 @@ function ProtectedApp() {
           <Route path="/kuis/:topicId" element={<QuizSessionPage />} />
           <Route path="/progres" element={<ProgressPage />} />
           <Route path="/kelas" element={<ClassroomToolsPage />} />
+          <Route path="/dashboard" element={<Navigate to="/kelas" replace />} />
+          <Route path="/guru" element={<Navigate to="/kelas" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Layout>

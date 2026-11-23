@@ -203,9 +203,7 @@ export function MateriPage() {
             const status = getTopicStatus(topic.id as TopicId);
             const lockedMessage = unlocked
               ? undefined
-              : profile?.role === 'student'
-                ? 'Modul ini terkunci untuk akses siswa. Minta guru membuka akses melalui Dashboard Guru.'
-                : getLockedMessage(topic.id as TopicId);
+              : getLockedMessage(topic.id as TopicId);
             return (
               <TopicCard
                 key={topic.id}

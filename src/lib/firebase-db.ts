@@ -2,7 +2,6 @@ import {
   collection,
   doc,
   setDoc,
-  getDoc,
   onSnapshot,
   query,
   orderBy,
@@ -18,50 +17,6 @@ import type {
 } from './classroom';
 import { normalizeStudentName } from './classroom';
 import type { TrackedQuizResult } from './classroom-sync';
-import type { AccessProfile } from './access-context';
-
-export interface FirebaseUserProfile {
-  uid: string;
-  email: string;
-  name: string;
-  className: string;
-  role: 'student' | 'teacher';
-  updatedAt: string;
-}
-
-/**
- * Menyimpan profil pengguna di koleksi 'users'.
- */
-export async function saveUserProfile(profile: FirebaseUserProfile): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const userRef = doc(db, 'users', profile.uid);
-  await setDoc(userRef, profile, { merge: true });
-}
-
-/**
- * Mengambil profil pengguna dari koleksi 'users' berdasarkan UID.
- */
-export async function getUserProfile(uid: string): Promise<FirebaseUserProfile | null> {
-  if (!db || !isFirebaseConfigured) return null;
-  const userRef = doc(db, 'users', uid);
-  const snap = await getDoc(userRef);
-  if (!snap.exists()) return null;
-  return snap.data() as FirebaseUserProfile;
-}
-
-/**
- * Mengubah FirebaseUserProfile menjadi AccessProfile.
- */
-export function toAccessProfile(user: FirebaseUserProfile): AccessProfile {
-  if (user.role === 'teacher') {
-    return { role: 'teacher', name: user.name };
-  }
-  return {
-    role: 'student',
-    name: user.name,
-    className: user.className || 'Belum diatur',
-  };
-}
 
 /**
  * Menyimpan aktivitas siswa ke koleksi 'student_activities'.

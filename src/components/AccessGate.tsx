@@ -75,7 +75,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
   );
 }
 
-function StudentActivityReporter({ profile, blocked = false }: { profile: AccessProfile; blocked?: boolean }) {
+export function StudentActivityReporter({ profile, blocked = false }: { profile: AccessProfile; blocked?: boolean }) {
   const location = useLocation();
 
   const reportActivity = useCallback((sectionId?: string) => {

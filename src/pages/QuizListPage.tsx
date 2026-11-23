@@ -58,8 +58,8 @@ export function QuizListPage() {
           return (
             <div
               key={topic.id}
-              className={`flex flex-col justify-between p-6 rounded-2xl border shadow-xs ${
-                unlocked ? 'bg-white border-[#F1E5D8]' : 'bg-slate-50 border-slate-200 opacity-80'
+              className={`flex flex-col justify-between p-6 rounded-2xl border shadow-xs transition-shadow ${
+                unlocked ? 'bg-white border-[#F1E5D8]' : 'bg-slate-50 border-slate-200 opacity-85'
               }`}
             >
               <div>
@@ -67,7 +67,7 @@ export function QuizListPage() {
                   <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
                     unlocked ? 'text-[#C2410C] bg-[#FFEDD5]' : 'text-slate-500 bg-slate-100'
                   }`}>
-                    Paket {index + 1}
+                    {unlocked ? `Paket ${index + 1}` : 'Terkunci'}
                   </span>
                   <span className="text-xs text-[#64748B]">5 Soal</span>
                 </div>
