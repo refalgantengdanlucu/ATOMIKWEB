@@ -33,11 +33,74 @@ export function getElement(atomicNumber: number): ChemicalElement | undefined {
 }
 
 export function getNeutronCount(massNumber: number, atomicNumber: number): number {
+  if (!Number.isInteger(atomicNumber) || atomicNumber < 1) {
+    throw new RangeError('Nomor atom (Z) harus bilangan bulat positif.');
+  }
+  if (!Number.isInteger(massNumber) || massNumber < atomicNumber) {
+    throw new RangeError(`Nomor massa (A) harus bilangan bulat dan A ≥ Z (${atomicNumber}).`);
+  }
   return massNumber - atomicNumber;
 }
 
 export function getElectronCount(atomicNumber: number, charge: number): number {
+  const validationError = validateParticleInput(atomicNumber, atomicNumber, charge);
+  if (validationError) {
+    throw new RangeError(validationError.message);
+  }
   return atomicNumber - charge;
+}
+
+/** Muatan positif maksimum yang masih menghasilkan elektron ≥ 0 (e = Z − q ≥ 0 → q ≤ Z). */
+export function getMaxPositiveCharge(atomicNumber: number): number {
+  if (!Number.isInteger(atomicNumber) || atomicNumber < 1) {
+    throw new RangeError('Nomor atom (Z) harus bilangan bulat positif.');
+  }
+  return atomicNumber;
+}
+
+/** Periksa apakah kombinasi nomor atom dan muatan menghasilkan jumlah elektron yang valid (≥ 0). */
+export function isValidCharge(atomicNumber: number, charge: number): boolean {
+  return (
+    Number.isInteger(atomicNumber) &&
+    atomicNumber >= 1 &&
+    Number.isInteger(charge) &&
+    atomicNumber - charge >= 0
+  );
+}
+
+export interface ParticleValidationError {
+  field: 'atomicNumber' | 'massNumber' | 'charge';
+  message: string;
+}
+
+/**
+ * Validasi input kalkulator partikel.
+ * Mengembalikan objek error jika input tidak valid, atau null jika semua valid.
+ */
+export function validateParticleInput(
+  atomicNumber: number,
+  massNumber: number,
+  charge: number,
+): ParticleValidationError | null {
+  if (!Number.isInteger(atomicNumber) || atomicNumber < 1) {
+    return { field: 'atomicNumber', message: 'Nomor atom (Z) harus bilangan bulat positif.' };
+  }
+  if (!Number.isInteger(massNumber) || massNumber < atomicNumber) {
+    return {
+      field: 'massNumber',
+      message: `Nomor massa (A) harus bilangan bulat dan A ≥ Z (${atomicNumber}).`,
+    };
+  }
+  if (!Number.isInteger(charge)) {
+    return { field: 'charge', message: 'Muatan ion harus bilangan bulat.' };
+  }
+  if (!isValidCharge(atomicNumber, charge)) {
+    return {
+      field: 'charge',
+      message: `Muatan +${charge} tidak valid untuk Z = ${atomicNumber}. Muatan positif tidak boleh lebih besar daripada nomor atom; maksimum untuk unsur ini adalah +${atomicNumber}.`,
+    };
+  }
+  return null;
 }
 
 export function getBohrShells(electronCount: number): number[] {

@@ -8,6 +8,8 @@ import {
   getElement,
   getElectronCount,
   getNeutronCount,
+  validateParticleInput,
+  type ParticleValidationError,
 } from '../../lib/chemistry';
 
 const cardClass = 'rounded-2xl border border-[#F1E5D8] bg-white p-5 shadow-sm sm:p-6';
@@ -218,18 +220,84 @@ const RELATION_DETAILS = {
   },
 } as const;
 
+const ALL_CHARGE_OPTIONS = [-2, -1, 0, 1, 2] as const;
+
+function chargeOptionLabel(q: number): string {
+  if (q === 0) return '0 (atom netral)';
+  if (q === -2) return '−2 (anion 2−)';
+  if (q === -1) return '−1 (anion 1−)';
+  if (q === 1) return '+1 (kation 1+)';
+  return '+2 (kation 2+)';
+}
+
 export function NuclideCalculator() {
   const [first, setFirst] = useState<NuclideInput>({ atomicNumber: 6, massNumber: 12 });
   const [second, setSecond] = useState<NuclideInput>({ atomicNumber: 6, massNumber: 14 });
   const [atomicNumber, setAtomicNumber] = useState(11);
   const [massNumber, setMassNumber] = useState(23);
   const [charge, setCharge] = useState(0);
+  const [inputError, setInputError] = useState<ParticleValidationError | null>(null);
+
   const element = getElement(atomicNumber)!;
-  const electronCount = getElectronCount(atomicNumber, charge);
   const relation = compareNuclides(first, second);
   const relationDetail = RELATION_DETAILS[relation];
   const firstElement = getElement(first.atomicNumber)!;
   const secondElement = getElement(second.atomicNumber)!;
+
+  const calculationError = validateParticleInput(atomicNumber, massNumber, charge);
+  const validationError = inputError ?? calculationError;
+  const isValid = calculationError === null;
+  const electronCount = isValid ? getElectronCount(atomicNumber, charge) : null;
+
+  const rejectInput = (error: ParticleValidationError, context = '') => {
+    setInputError({
+      ...error,
+      message: `${context}${error.message} Input tidak diterapkan; nilai terakhir yang valid tetap digunakan.`,
+    });
+  };
+
+  const handleElementChange = (z: number) => {
+    const nextElement = getElement(z);
+    if (!nextElement) return;
+
+    const nextMassNumber = Math.max(z, nextElement.defaultMassNumber);
+    const error = validateParticleInput(z, nextMassNumber, charge);
+    if (error) {
+      rejectInput(error, `${nextElement.symbol}: `);
+      return;
+    }
+
+    setAtomicNumber(z);
+    setMassNumber(nextMassNumber);
+    setInputError(null);
+  };
+
+  const handleMassNumberChange = (nextMassNumber: number) => {
+    const error = validateParticleInput(atomicNumber, nextMassNumber, charge);
+    if (error) {
+      rejectInput(error);
+      return;
+    }
+    if (nextMassNumber > atomicNumber + 40) {
+      rejectInput({
+        field: 'massNumber',
+        message: `Nomor massa dibatasi sampai ${atomicNumber + 40}.`,
+      });
+      return;
+    }
+    setMassNumber(nextMassNumber);
+    setInputError(null);
+  };
+
+  const handleChargeChange = (nextCharge: number) => {
+    const error = validateParticleInput(atomicNumber, massNumber, nextCharge);
+    if (error) {
+      rejectInput(error);
+      return;
+    }
+    setCharge(nextCharge);
+    setInputError(null);
+  };
 
   return (
     <div className="space-y-5">
@@ -241,35 +309,60 @@ export function NuclideCalculator() {
         </div>
         <div className="grid gap-5 lg:grid-cols-[1fr_0.85fr]">
           <div className="grid gap-4 sm:grid-cols-2">
-            <ElementPicker value={atomicNumber} label="Unsur / nomor atom Z" onChange={(z) => { setAtomicNumber(z); setMassNumber(Math.max(z, getElement(z)!.defaultMassNumber)); }} />
+            <ElementPicker value={atomicNumber} label="Unsur / nomor atom Z" onChange={handleElementChange} />
             <label className="block space-y-1.5 text-xs font-bold text-[#475569]">
               Nomor massa A
-              <input className={numberClass} type="number" min={atomicNumber} max={atomicNumber + 40} value={massNumber} onChange={(event) => {
-                const next = Number(event.target.value);
-                if (Number.isInteger(next) && next >= atomicNumber && next <= atomicNumber + 40) setMassNumber(next);
-              }} />
+              <input
+                className={numberClass}
+                type="number"
+                min={atomicNumber}
+                max={atomicNumber + 40}
+                value={massNumber}
+                onChange={(event) => handleMassNumberChange(event.currentTarget.valueAsNumber)}
+              />
             </label>
             <label className="block space-y-1.5 text-xs font-bold text-[#475569] sm:col-span-2">
               Muatan partikel (q)
-              <select className={selectClass} value={charge} onChange={(event) => setCharge(Number(event.target.value))}>
-                <option value={-2}>−2 (anion 2−)</option>
-                <option value={-1}>−1 (anion 1−)</option>
-                <option value={0}>0 (atom netral)</option>
-                <option value={1}>+1 (kation 1+)</option>
-                <option value={2}>+2 (kation 2+)</option>
+              <select className={selectClass} value={charge} onChange={(event) => handleChargeChange(Number(event.target.value))}>
+                {ALL_CHARGE_OPTIONS.map((q) => (
+                  <option key={q} value={q}>{chargeOptionLabel(q)}</option>
+                ))}
               </select>
             </label>
             <div className="rounded-xl bg-[#FFF8F0] p-4 sm:col-span-2">
               <p className="text-xs font-semibold text-[#64748B]">Notasi dan hasil</p>
-              <p className="mt-1 text-2xl font-black text-[#172033]"><sup className="text-sm">{massNumber}</sup>{element.symbol}<sup className="text-sm">{charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '−'}`}</sup></p>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <CountTile label="Proton" value={atomicNumber} />
-                <CountTile label="Neutron" value={getNeutronCount(massNumber, atomicNumber)} />
-                <CountTile label="Elektron" value={electronCount} />
-              </div>
+              <p className="mt-1 text-2xl font-black text-[#172033]">
+                <sup className="text-sm">{massNumber}</sup>{element.symbol}<sup className="text-sm">{charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '−'}`}</sup>
+              </p>
+              {validationError && (
+                <div className="mt-3 rounded-xl border border-red-200 bg-red-50 px-4 py-3" role="alert" aria-live="polite">
+                  <p className="text-sm font-bold text-red-700">⚠ Input tidak valid</p>
+                  <p className="mt-1 text-xs leading-5 text-red-600">{validationError.message}</p>
+                </div>
+              )}
+              {isValid ? (
+                <div className="mt-3 grid grid-cols-3 gap-2 text-center">
+                  <CountTile label="Proton" value={atomicNumber} />
+                  <CountTile label="Neutron" value={getNeutronCount(massNumber, atomicNumber)} />
+                  <CountTile label="Elektron" value={electronCount!} />
+                </div>
+              ) : (
+                <p className="mt-3 text-xs text-red-600">Hasil partikel tidak tersedia untuk kombinasi input ini.</p>
+              )}
             </div>
           </div>
-          <AtomDiagram protons={atomicNumber} neutrons={getNeutronCount(massNumber, atomicNumber)} electrons={electronCount} caption={`${element.symbol}${charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '−'}`}`} />
+          {isValid && electronCount !== null ? (
+            <AtomDiagram
+              protons={atomicNumber}
+              neutrons={getNeutronCount(massNumber, atomicNumber)}
+              electrons={electronCount}
+              caption={`${element.symbol}${charge === 0 ? '' : `${Math.abs(charge)}${charge > 0 ? '+' : '−'}`}`}
+            />
+          ) : (
+            <div className="flex items-center justify-center rounded-2xl border border-red-100 bg-red-50 p-6 text-center text-sm text-red-500">
+              <p>Diagram tidak ditampilkan karena input tidak valid.</p>
+            </div>
+          )}
         </div>
       </section>
 
