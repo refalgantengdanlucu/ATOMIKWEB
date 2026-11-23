@@ -17,7 +17,7 @@ Dokumen ini mendefinisikan peran, batasan, keputusan terkunci, dan alur kerja AI
 ## 2. Keputusan Terkunci (Non-Negotiable)
 
 1. **Teknologi:** React 18 + TypeScript + Vite + Tailwind CSS. Routing wajib menggunakan `HashRouter` untuk kompatibilitas hosting statis. Vitest untuk logika murni.
-2. **Tanpa Backend & Bebas Akun:** Seluruh data materi/soal berada di `src/data/`, progres belajar anonim di `localStorage` peramban (`atomika-progress-v1`).
+2. **Penyimpanan Konten & Progres:** Materi/soal berada di `src/data/`; progres belajar lokal disimpan di `localStorage` per UID siswa. Data global lama hanya diisolasi pada namespace anonim, tidak diwariskan otomatis ke akun.
 3. **Cakupan Unsur:** Terbatas pada unsur **Z = 1 s.d. 20**.
 4. **Batasan Materi Ketat:** **Dilarang keras** memasukkan materi, latihan, atau soal mengenai konfigurasi elektron ($1s^2 2s^2 \dots$), subkulit, orbital, atau bilangan kuantum.
 5. **Representasi Visual:** Model Bohr disederhanakan (kapasitas 2, 8, 8, sisanya kulit ke-4) dan **wajib** mencantumkan label bahwa ini adalah representasi penyederhanaan bukan skala sebenarnya.

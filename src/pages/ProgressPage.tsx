@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { Award, RotateCcw, BookOpen, Atom, HelpCircle, CheckCircle2, Lock, ArrowRight } from 'lucide-react';
-import { LAB_MODES, useProgress, resetAllProgress } from '../lib/progress';
+import { LAB_MODES, useProgress } from '../lib/progress';
 
 export function ProgressPage() {
   const {
@@ -14,12 +14,13 @@ export function ProgressPage() {
     areAllLabModesCompleted,
     areQuizzesUnlocked,
     isQuizUnlocked,
+    resetProgress,
   } = useProgress();
   const [confirmReset, setConfirmReset] = useState(false);
 
   const handleReset = () => {
     if (confirmReset) {
-      resetAllProgress();
+      resetProgress();
       setConfirmReset(false);
     } else {
       setConfirmReset(true);

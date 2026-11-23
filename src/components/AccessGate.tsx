@@ -9,7 +9,7 @@ import { saveStudentActivity } from '../lib/firebase-db';
 import { TOPICS } from '../data/topics';
 import { SECTIONS } from '../data/sections';
 import type { AccessProfile } from '../lib/access-context';
-import { useProgress } from '../lib/progress';
+import { recordActivityForKey, useProgress } from '../lib/progress';
 import type { TopicId } from '../types';
 import { SkeletonBlock } from './Skeleton';
 
@@ -91,6 +91,7 @@ export function AccessGate({ children }: { children: ReactNode }) {
 
 export function StudentActivityReporter({ profile, blocked = false }: { profile: AccessProfile; blocked?: boolean }) {
   const location = useLocation();
+  const { progress, storageKey, markAsRead } = useProgress({ uid: profile.uid });
 
   const reportActivity = useCallback((sectionId?: string) => {
     if (profile.role !== 'student') return;
@@ -111,26 +112,21 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
               : 'Beranda';
     const currentActivity = blocked ? `${activity} · akses terkunci` : activity;
 
-    const visitKey = `atomika-student-visits-v1:${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
-    let visitedSectionIds: string[] = [];
-    try {
-      const savedVisits = window.localStorage.getItem(visitKey);
-      visitedSectionIds = savedVisits ? JSON.parse(savedVisits) as string[] : [];
-    } catch (error) {
-      console.error('Gagal membaca progres topik siswa:', error);
-    }
-    if (sectionId && SECTIONS.some((item) => item.id === sectionId) && !visitedSectionIds.includes(sectionId)) {
-      visitedSectionIds = [...visitedSectionIds, sectionId];
-      try {
-        window.localStorage.setItem(visitKey, JSON.stringify(visitedSectionIds));
-      } catch (error) {
-        console.error('Gagal menyimpan progres topik siswa:', error);
-      }
-    }
+    const validSectionId = sectionId && SECTIONS.some((item) => item.id === sectionId)
+      ? sectionId
+      : undefined;
+    if (validSectionId) markAsRead(validSectionId);
+    const visitedSectionIds = validSectionId && !progress.visitedSectionIds.includes(validSectionId)
+      ? [...progress.visitedSectionIds, validSectionId]
+      : progress.visitedSectionIds;
     const progressSummary = TOPICS.map((topic, index) => {
       const count = topic.sectionIds.filter((id) => visitedSectionIds.includes(id)).length;
       return `T${index + 1} ${count}/${topic.sectionIds.length}`;
     }).join(' · ');
+    recordActivityForKey(storageKey, {
+      activity: validSectionId ? `${currentActivity} · Bagian ${validSectionId}` : currentActivity,
+      path: `${location.pathname}${location.search}`,
+    });
     const record: StudentActivity = {
       name: profile.name,
       className: profile.className,
@@ -148,7 +144,7 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
     writeClassroomData(CLASSROOM_STORAGE_KEYS.activity, nextActivities);
     void saveStudentActivity(record);
     void sendActivityToSheets(profile, record);
-  }, [blocked, location.pathname, location.search, profile]);
+  }, [blocked, location.pathname, location.search, markAsRead, profile, progress.visitedSectionIds, storageKey]);
 
   useEffect(() => {
     reportActivity();

@@ -57,6 +57,7 @@ describe('Sistem Penguncian Berurutan (Sequential Locking)', () => {
   const makeProgress = (overrides: Partial<LocalProgress> = {}): LocalProgress => ({
     version: 1,
     visitedSectionIds: [],
+    activityLog: [],
     labDone: { t1: false, t2: false, t3: false },
     quizResults: {},
     updatedAt: new Date(0).toISOString(),

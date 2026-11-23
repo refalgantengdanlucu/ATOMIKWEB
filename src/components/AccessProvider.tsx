@@ -18,12 +18,13 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     : user.email ?? 'Pengguna ATOMIKA';
 
   if (token.claims.role === 'teacher') {
-    return { role: 'teacher', name };
+    return { role: 'teacher', uid: user.uid, name };
   }
 
   const classNameValue = profile?.className;
   return {
     role: 'student',
+    uid: user.uid,
     name,
     className: typeof classNameValue === 'string' && classNameValue.trim()
       ? classNameValue.trim()
@@ -55,6 +56,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
       }
 
       setStatus('loading');
+      setProfile(null);
       void profileFromUser(user).then((nextProfile) => {
         if (!active || currentRevision !== profileRevision.current) return;
         setProfile(nextProfile);
@@ -64,6 +66,7 @@ export function AccessProvider({ children }: { children: ReactNode }) {
         console.error('Gagal memulihkan profil autentikasi:', error);
         setProfile({
           role: 'student',
+          uid: user.uid,
           name: user.displayName?.trim() || user.email || 'Pengguna ATOMIKA',
           className: 'Belum diatur',
         });

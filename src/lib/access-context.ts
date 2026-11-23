@@ -1,8 +1,8 @@
 import { createContext, useContext } from 'react';
 
 export type AccessProfile =
-  | { role: 'student'; name: string; className: string }
-  | { role: 'teacher'; name: string };
+  | { role: 'student'; uid: string; name: string; className: string }
+  | { role: 'teacher'; uid: string; name: string };
 
 export type AuthStatus = 'loading' | 'ready';
 

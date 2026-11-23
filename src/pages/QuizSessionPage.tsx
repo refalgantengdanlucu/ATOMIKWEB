@@ -3,7 +3,7 @@ import { useParams, Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
-import { getProgress, saveProgress, isTopicCompleted } from '../lib/progress';
+import { isTopicCompleted, saveProgressForKey, getProgressForKey, useProgress } from '../lib/progress';
 import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock, ArrowRight } from 'lucide-react';
@@ -15,13 +15,13 @@ interface SavedQuizSession {
 
 type SubmissionSyncStatus = 'idle' | 'pending' | 'saved' | 'failed';
 
-function quizStorageKey(topicId: TopicId) {
-  return `atomika-quiz-${topicId}-v1`;
+function quizStorageKey(storageKey: string, topicId: TopicId) {
+  return `${storageKey}:quiz-${topicId}-v1`;
 }
 
-function readQuizSession(topicId: TopicId): SavedQuizSession {
+function readQuizSession(storageKey: string, topicId: TopicId): SavedQuizSession {
   try {
-    const raw = window.localStorage.getItem(quizStorageKey(topicId));
+    const raw = window.localStorage.getItem(quizStorageKey(storageKey, topicId));
     if (!raw) return { answers: {}, submitted: false };
 
     const saved = JSON.parse(raw) as Partial<SavedQuizSession>;
@@ -35,9 +35,9 @@ function readQuizSession(topicId: TopicId): SavedQuizSession {
   }
 }
 
-function writeQuizSession(topicId: TopicId, session: SavedQuizSession): boolean {
+function writeQuizSession(storageKey: string, topicId: TopicId, session: SavedQuizSession): boolean {
   try {
-    window.localStorage.setItem(quizStorageKey(topicId), JSON.stringify(session));
+    window.localStorage.setItem(quizStorageKey(storageKey, topicId), JSON.stringify(session));
     return true;
   } catch (error) {
     console.error('Gagal menyimpan jawaban kuis:', error);
@@ -49,6 +49,7 @@ export function QuizSessionPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const topic = TOPICS.find((t) => t.id === topicId);
   const { profile } = useAccess();
+  const { progress, storageKey } = useProgress();
 
   if (!topic) {
     return (
@@ -72,7 +73,7 @@ export function QuizSessionPage() {
   }
 
   const isTeacher = profile?.role === 'teacher';
-  const isUnlocked = isTeacher || isTopicCompleted(topic.id as TopicId, getProgress().visitedSectionIds);
+  const isUnlocked = isTeacher || isTopicCompleted(topic.id as TopicId, progress.visitedSectionIds);
 
   if (!isUnlocked) {
     return (
@@ -95,13 +96,13 @@ export function QuizSessionPage() {
     );
   }
 
-  return <QuizSession key={topic.id} topic={topic} />;
+  return <QuizSession key={`${storageKey}:${topic.id}`} topic={topic} storageKey={storageKey} />;
 }
 
-function QuizSession({ topic }: { topic: Topic }) {
+function QuizSession({ topic, storageKey }: { topic: Topic; storageKey: string }) {
   const { profile } = useAccess();
   const questions = QUIZ_QUESTIONS[topic.id];
-  const [session, setSession] = useState(() => readQuizSession(topic.id));
+  const [session, setSession] = useState(() => readQuizSession(storageKey, topic.id));
   const [storageAvailable, setStorageAvailable] = useState(true);
   const [submissionSyncStatus, setSubmissionSyncStatus] = useState<SubmissionSyncStatus>('idle');
   const answeredCount = questions.filter((question) => session.answers[question.id]).length;
@@ -116,14 +117,14 @@ function QuizSession({ topic }: { topic: Topic }) {
       answers: { ...session.answers, [questionId]: optionId },
     };
     setSession(nextSession);
-    setStorageAvailable(writeQuizSession(topic.id, nextSession));
+    setStorageAvailable(writeQuizSession(storageKey, topic.id, nextSession));
   };
 
   const submitQuiz = () => {
     if (answeredCount !== questions.length || session.submitted) return;
 
     const completedSession = { ...session, submitted: true };
-    setStorageAvailable(writeQuizSession(topic.id, completedSession));
+    setStorageAvailable(writeQuizSession(storageKey, topic.id, completedSession));
     setSession(completedSession);
 
     const score = Math.round((correctCount / questions.length) * 100);
@@ -145,9 +146,9 @@ function QuizSession({ topic }: { topic: Topic }) {
       });
     }
 
-    const progress = getProgress();
+    const progress = getProgressForKey(storageKey);
     const previousResult = progress.quizResults[topic.id];
-    saveProgress({
+    saveProgressForKey(storageKey, {
       ...progress,
       quizResults: {
         ...progress.quizResults,
@@ -165,7 +166,7 @@ function QuizSession({ topic }: { topic: Topic }) {
     const freshSession = { answers: {}, submitted: false };
     setSession(freshSession);
     setSubmissionSyncStatus('idle');
-    setStorageAvailable(writeQuizSession(topic.id, freshSession));
+    setStorageAvailable(writeQuizSession(storageKey, topic.id, freshSession));
   };
 
   return (

@@ -53,7 +53,7 @@ Masalah berikut adalah **hipotesis kebutuhan** yang perlu dikonfirmasi lewat obs
 | Konfigurasi elektron | **Tidak dimasukkan.** Tidak ada materi, soal, atau latihan konfigurasi elektron, subkulit, orbital, atau bilangan kuantum |
 | Model visual | Bohr disederhanakan. Jumlah elektron per kulit hanya untuk menggambar (kapasitas 2, 8, 8, sisanya kulit ke-4) dan wajib diberi label penyederhanaan |
 | Kuis | 3 paket (satu per topik) × 5 soal = 15 soal. Satu jawaban per soal. Nilai = benar ÷ 5 × 100. Simpan nilai **terakhir dan terbaik** |
-| Progres | `localStorage`, kunci `atomika-progress-v1`. Status topik **diturunkan** dari data, bukan disimpan ganda |
+| Progres | `localStorage` per UID siswa (`atomika-progress-v1:{uid}`). Bagian dibaca, status topik, hasil kuis, lab, dan aktivitas tersimpan per siswa. Key global lama hanya dipertahankan pada namespace anonim dan tidak digabungkan ke akun. Status topik **diturunkan** dari data, bukan disimpan ganda |
 | Pencarian | Sisi klien, indeks dari data materi, skor berbobot (Bagian 7.1) |
 | Di luar MVP | Akun, sinkronisasi, dasbor guru, papan peringkat, chatbot AI, LMS, analitik, gim bercabang, aplikasi nanoteknologi |
 | Bahasa | Seluruh antarmuka dan konten Bahasa Indonesia |

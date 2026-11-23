@@ -1,18 +1,18 @@
 import { useState, useEffect, useCallback } from 'react';
-import type { LocalProgress, TopicId } from '../types';
+import type { LocalProgress, ProgressActivity, TopicId } from '../types';
 import { TOPICS } from '../data/topics';
+import { useAccess } from './access-context';
 
 // ─────────────────────────────────────────────────────────
 // Kebijakan Namespace per Pengguna (AD17-05)
 // ─────────────────────────────────────────────────────────
 // Progres setiap siswa disimpan pada kunci terpisah di localStorage.
 // Format kunci: `atomika-progress-v1:{userKey}`
-// - Jika Firebase aktif → userKey = UID Firebase (stabil, unik)
-// - Jika tanpa Firebase → userKey = "nama|kelas" (lowercase, normalized)
+// - Sesi siswa/guru terautentikasi → userKey = UID Firebase (stabil, unik)
 // - Jika belum login sama sekali → userKey = "anonymous" (readonly/demo)
 //
-// Kunci lama `atomika-progress-v1` (global, tanpa userKey) dianggap
-// sebagai data anonim dan TIDAK dihapus; hanya diabaikan saat user login.
+// Kunci lama `atomika-progress-v1` hanya disalin ke namespace anonymous saat
+// belum ada data anonymous. Data itu tidak pernah digabungkan ke akun siswa.
 // ─────────────────────────────────────────────────────────
 
 export const PROGRESS_KEY_PREFIX = 'atomika-progress-v1:';
@@ -20,18 +20,13 @@ export const PROGRESS_EVENT_NAME = 'atomika-progress-updated';
 
 /** Kunci anonymous — hanya digunakan sebelum login atau di mode demo. */
 const ANONYMOUS_KEY = `${PROGRESS_KEY_PREFIX}anonymous`;
+const LEGACY_ANONYMOUS_KEY = 'atomika-progress-v1';
+const MAX_ACTIVITY_LOG_LENGTH = 100;
 
 /** Membangun storage key dari identitas pengguna. */
 export function buildProgressKey(userKey: string | null | undefined): string {
   if (!userKey || !userKey.trim()) return ANONYMOUS_KEY;
   return `${PROGRESS_KEY_PREFIX}${userKey.trim()}`;
-}
-
-/** Normalkan nama+kelas menjadi userKey yang aman sebagai bagian kunci localStorage. */
-export function normalizeUserKey(name: string, className: string): string {
-  const n = name.trim().toLocaleLowerCase('id-ID').replace(/\s+/g, '_');
-  const c = className.trim().toLocaleLowerCase('id-ID').replace(/\s+/g, '_');
-  return `${n}|${c}`;
 }
 
 // ─────────────────────────────────────────────────────────
@@ -41,6 +36,7 @@ export function normalizeUserKey(name: string, className: string): string {
 const DEFAULT_PROGRESS: LocalProgress = {
   version: 1,
   visitedSectionIds: [],
+  activityLog: [],
   labDone: { t1: false, t2: false, t3: false },
   quizResults: {},
   updatedAt: new Date().toISOString(),
@@ -63,11 +59,20 @@ export type LabModeId = (typeof LAB_MODES)[number]['id'];
  * Tidak pernah membaca kunci pengguna lain.
  */
 export function getProgressForKey(storageKey: string): LocalProgress {
-  if (typeof window === 'undefined' || !window.localStorage) {
-    return DEFAULT_PROGRESS;
-  }
+  if (typeof window === 'undefined') return DEFAULT_PROGRESS;
   try {
-    const raw = window.localStorage.getItem(storageKey);
+    const storage = window.localStorage;
+    if (!storage) return DEFAULT_PROGRESS;
+    if (storageKey === ANONYMOUS_KEY && !storage.getItem(ANONYMOUS_KEY)) {
+      const legacy = storage.getItem(LEGACY_ANONYMOUS_KEY);
+      if (legacy) {
+        const parsedLegacy = JSON.parse(legacy) as Partial<LocalProgress>;
+        if (parsedLegacy.version === 1 && Array.isArray(parsedLegacy.visitedSectionIds)) {
+          storage.setItem(ANONYMOUS_KEY, legacy);
+        }
+      }
+    }
+    const raw = storage.getItem(storageKey);
     if (!raw) return DEFAULT_PROGRESS;
     const parsed = JSON.parse(raw) as Partial<LocalProgress>;
     if (parsed && parsed.version === 1 && Array.isArray(parsed.visitedSectionIds)) {
@@ -75,6 +80,15 @@ export function getProgressForKey(storageKey: string): LocalProgress {
         ...DEFAULT_PROGRESS,
         ...parsed,
         visitedSectionIds: parsed.visitedSectionIds,
+        activityLog: Array.isArray(parsed.activityLog)
+          ? parsed.activityLog.filter(
+              (item): item is ProgressActivity =>
+                Boolean(item) &&
+                typeof item.activity === 'string' &&
+                typeof item.path === 'string' &&
+                typeof item.occurredAt === 'string'
+            )
+          : [],
         labDone: {
           ...DEFAULT_PROGRESS.labDone,
           ...(parsed.labDone && typeof parsed.labDone === 'object' ? parsed.labDone : {}),
@@ -99,16 +113,39 @@ export function getProgress(): LocalProgress {
  * lalu memancarkan event reaktif.
  */
 export function saveProgressForKey(storageKey: string, progress: LocalProgress): void {
-  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (typeof window === 'undefined') return;
   try {
+    const storage = window.localStorage;
+    if (!storage) return;
     const updated: LocalProgress = { ...progress, updatedAt: new Date().toISOString() };
-    window.localStorage.setItem(storageKey, JSON.stringify(updated));
+    storage.setItem(storageKey, JSON.stringify(updated));
     window.dispatchEvent(
       new CustomEvent(PROGRESS_EVENT_NAME, { detail: { storageKey, progress: updated } })
     );
   } catch (err) {
     console.error(`[progress] Gagal menyimpan ${storageKey}:`, err);
   }
+}
+
+export function recordActivityForKey(
+  storageKey: string,
+  activity: Omit<ProgressActivity, 'occurredAt'>
+): void {
+  const current = getProgressForKey(storageKey);
+  const lastActivity = current.activityLog[current.activityLog.length - 1];
+  const occurredAt = new Date().toISOString();
+  const isDuplicate =
+    lastActivity?.activity === activity.activity &&
+    lastActivity.path === activity.path &&
+    Date.now() - Date.parse(lastActivity.occurredAt) < 60_000;
+  if (isDuplicate) return;
+  saveProgressForKey(storageKey, {
+    ...current,
+    activityLog: [
+      ...current.activityLog,
+      { ...activity, occurredAt },
+    ].slice(-MAX_ACTIVITY_LOG_LENGTH),
+  });
 }
 
 /** Shorthand: simpan ke kunci anonim. */
@@ -272,31 +309,23 @@ export function getTopicCompletion(
 // ─────────────────────────────────────────────────────────
 
 export interface ProgressUserIdentity {
-  /** UID Firebase (utama) atau null jika tidak ada. */
+  /** UID Firebase yang stabil dan unik; null berarti mode anonim. */
   uid: string | null;
-  /** Nama siswa dari profil. Digunakan sebagai fallback jika uid null. */
-  name?: string;
-  /** Nama kelas siswa. Digunakan sebagai fallback jika uid null. */
-  className?: string;
 }
 
 /**
- * Derivasi storage key dari identitas pengguna.
- * Prioritas: uid Firebase > nama|kelas > anonymous
+ * Derivasi storage key dari UID Firebase. Identitas nama/kelas tidak cukup unik.
  */
 export function deriveStorageKey(identity: ProgressUserIdentity | null | undefined): string {
   if (!identity) return ANONYMOUS_KEY;
   if (identity.uid) return buildProgressKey(identity.uid);
-  if (identity.name) return buildProgressKey(normalizeUserKey(identity.name, identity.className ?? ''));
   return ANONYMOUS_KEY;
 }
 
 /**
  * Hook utama untuk mengakses dan memodifikasi progres belajar.
  *
- * @param identity  Identitas pengguna yang sedang aktif.
- *   - Harus dioper dari AccessProvider/useAccess agar key-nya benar.
- *   - Jika null/undefined, hook beroperasi dalam mode anonim.
+ * @param identity Identitas opsional; tanpa argumen identitas AccessProvider digunakan.
  *
  * Hook ini REAKTIF terhadap perubahan `identity`:
  * ketika pengguna logout lalu pengguna lain login,
@@ -304,37 +333,48 @@ export function deriveStorageKey(identity: ProgressUserIdentity | null | undefin
  * tanpa mencampur data kedua pengguna.
  */
 export function useProgress(identity?: ProgressUserIdentity | null) {
-  const storageKey = deriveStorageKey(identity);
+  const { profile } = useAccess();
+  const currentIdentity = identity === undefined
+    ? profile
+      ? { uid: profile.uid }
+      : null
+    : identity;
+  const storageKey = deriveStorageKey(currentIdentity);
 
-  const [progress, setProgress] = useState<LocalProgress>(() =>
-    getProgressForKey(storageKey)
-  );
+  const [loadedProgress, setLoadedProgress] = useState(() => ({
+    storageKey,
+    progress: getProgressForKey(storageKey),
+  }));
+  const progress = loadedProgress.storageKey === storageKey
+    ? loadedProgress.progress
+    : getProgressForKey(storageKey);
 
-  // Muat ulang progres setiap kali identitas (dan kunci storage) berubah
-  useEffect(() => {
-    setProgress(getProgressForKey(storageKey));
-  }, [storageKey]);
-
-  // Dengarkan event update dari tab/jendela yang sama
+  // Dengarkan update untuk semua namespace agar akun yang kembali aktif
+  // selalu memuat snapshot terbaru, termasuk setelah pergantian akun.
   const handleUpdate = useCallback(
     (event: Event) => {
       const detail = (event as CustomEvent<{ storageKey: string }>).detail;
-      // Hanya respond jika event berasal dari kunci yang sama
-      if (!detail?.storageKey || detail.storageKey === storageKey) {
-        setProgress(getProgressForKey(storageKey));
+      if (detail?.storageKey) {
+        setLoadedProgress({
+          storageKey: detail.storageKey,
+          progress: getProgressForKey(detail.storageKey),
+        });
       }
     },
-    [storageKey]
+    []
   );
 
-  // Dengarkan event update dari tab lain (storage event)
+  // Dengarkan event update dari tab lain (storage event).
   const handleStorageEvent = useCallback(
     (event: StorageEvent) => {
-      if (event.key === storageKey) {
-        setProgress(getProgressForKey(storageKey));
+      if (event.key?.startsWith(PROGRESS_KEY_PREFIX)) {
+        setLoadedProgress({
+          storageKey: event.key,
+          progress: getProgressForKey(event.key),
+        });
       }
     },
-    [storageKey]
+    []
   );
 
   useEffect(() => {
