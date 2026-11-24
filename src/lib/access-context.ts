@@ -10,6 +10,7 @@ export interface AccessContextValue {
   profile: AccessProfile | null;
   status: AuthStatus;
   clearProfile: () => void;
+  enter?: (profile: AccessProfile) => void;
   exit: () => Promise<void>;
 }
 

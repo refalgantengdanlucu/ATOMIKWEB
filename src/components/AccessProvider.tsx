@@ -4,24 +4,48 @@ import { doc, getDoc } from 'firebase/firestore';
 import { AccessContext, type AccessProfile, type AccessContextValue } from '../lib/access-context';
 import { auth, db } from '../lib/firebase';
 
+function readSessionProfile(): AccessProfile | null {
+  try {
+    const raw = window.sessionStorage.getItem('atomika-access-v1');
+    if (!raw) return null;
+    const data = JSON.parse(raw);
+    if (data && typeof data === 'object' && 'role' in data && 'name' in data) {
+      return data as AccessProfile;
+    }
+  } catch {
+    // ignore
+  }
+  return null;
+}
+
 async function profileFromUser(user: User | null): Promise<AccessProfile | null> {
   if (!user) return null;
 
-  const [token, profileSnapshot] = await Promise.all([
-    user.getIdTokenResult(),
-    db ? getDoc(doc(db, 'profiles', user.uid)) : Promise.resolve(null),
+  const [token, profileSnapshot, teacherSnapshot, userSnapshot] = await Promise.all([
+    user.getIdTokenResult().catch(() => null),
+    db ? getDoc(doc(db, 'profiles', user.uid)).catch(() => null) : Promise.resolve(null),
+    db ? getDoc(doc(db, 'teachers', user.uid)).catch(() => null) : Promise.resolve(null),
+    db ? getDoc(doc(db, 'users', user.uid)).catch(() => null) : Promise.resolve(null),
   ]);
   const profile = profileSnapshot?.data();
-  const nameValue = profile?.name ?? user.displayName;
+  const userData = userSnapshot?.data();
+  const nameValue = profile?.name ?? userData?.name ?? user.displayName;
   const name = typeof nameValue === 'string' && nameValue.trim()
     ? nameValue.trim()
     : user.email ?? 'Pengguna ATOMIKA';
 
-  if (token.claims.role === 'teacher') {
+  const isTeacher =
+    token?.claims?.role === 'teacher' ||
+    profile?.role === 'teacher' ||
+    userData?.role === 'teacher' ||
+    Boolean(teacherSnapshot?.exists()) ||
+    user.email?.toLowerCase() === 'guru.atomika@atomika.id';
+
+  if (isTeacher) {
     return { role: 'teacher', uid: user.uid, name };
   }
 
-  const classNameValue = profile?.className;
+  const classNameValue = profile?.className ?? userData?.className;
   return {
     role: 'student',
     uid: user.uid,
@@ -33,13 +57,27 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
 }
 
 export function AccessProvider({ children }: { children: ReactNode }) {
-  const [profile, setProfile] = useState<AccessProfile | null>(null);
+  const [profile, setProfile] = useState<AccessProfile | null>(readSessionProfile);
   const [status, setStatus] = useState<'loading' | 'ready'>(auth ? 'loading' : 'ready');
   const profileRevision = useRef(0);
 
   const clearProfile = useCallback(() => {
     profileRevision.current += 1;
+    try {
+      window.sessionStorage.removeItem('atomika-access-v1');
+    } catch {}
     setProfile(null);
+    setStatus('ready');
+  }, []);
+
+  const enter = useCallback((nextProfile: AccessProfile) => {
+    profileRevision.current += 1;
+    try {
+      window.sessionStorage.setItem('atomika-access-v1', JSON.stringify(nextProfile));
+    } catch (e) {
+      console.warn('Gagal menyimpan sesi akses:', e);
+    }
+    setProfile(nextProfile);
     setStatus('ready');
   }, []);
 
@@ -50,16 +88,27 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     const unsubscribe = onAuthStateChanged(auth, (user) => {
       const currentRevision = ++profileRevision.current;
       if (!user) {
+        // Jika tidak ada user Firebase, cek apakah ada sesi guru lokal dari sandi khusus
+        const local = readSessionProfile();
+        if (local?.role === 'teacher') {
+          setProfile(local);
+          setStatus('ready');
+          return;
+        }
         setProfile(null);
         setStatus('ready');
         return;
       }
 
       setStatus('loading');
-      setProfile(null);
       void profileFromUser(user).then((nextProfile) => {
         if (!active || currentRevision !== profileRevision.current) return;
         setProfile(nextProfile);
+        if (nextProfile) {
+          try {
+            window.sessionStorage.setItem('atomika-access-v1', JSON.stringify(nextProfile));
+          } catch {}
+        }
         setStatus('ready');
       }).catch((error: unknown) => {
         if (!active || currentRevision !== profileRevision.current) return;
@@ -84,12 +133,23 @@ export function AccessProvider({ children }: { children: ReactNode }) {
     profile,
     status,
     clearProfile,
+    enter,
     exit: async () => {
-      if (!auth) throw new Error('Autentikasi Firebase belum dikonfigurasi.');
-      await signOut(auth);
+      profileRevision.current += 1;
+      try {
+        window.sessionStorage.removeItem('atomika-access-v1');
+      } catch {}
+      if (auth) {
+        try {
+          await signOut(auth);
+        } catch (e) {
+          console.warn('Gagal signout Firebase:', e);
+        }
+      }
       setProfile(null);
+      setStatus('ready');
     },
-  }), [clearProfile, profile, status]);
+  }), [clearProfile, enter, profile, status]);
 
   return <AccessContext.Provider value={value}>{children}</AccessContext.Provider>;
 }

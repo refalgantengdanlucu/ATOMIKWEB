@@ -1,5 +1,5 @@
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap, LogIn } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 import { useProgress } from '../lib/progress';
@@ -156,7 +156,7 @@ export function Navbar() {
           })}
         </nav>
 
-        {profile && (
+        {profile ? (
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
             <div className="hidden text-right lg:block">
               <p className="max-w-36 truncate text-xs font-bold text-[#172033]">{profile.name}</p>
@@ -173,6 +173,17 @@ export function Navbar() {
               <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
               <span className="hidden sm:inline">Keluar</span>
             </button>
+          </div>
+        ) : (
+          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            <Link
+              to="/login"
+              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#C2410C] px-3.5 text-xs font-bold text-white transition-colors hover:bg-[#9A3412] shadow-xs sm:px-4 sm:text-sm"
+              title="Masuk ke akun ATOMIKA"
+            >
+              <LogIn className="h-4 w-4" aria-hidden="true" />
+              <span>Masuk</span>
+            </Link>
           </div>
         )}
 

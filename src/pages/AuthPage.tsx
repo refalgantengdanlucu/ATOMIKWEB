@@ -1,6 +1,18 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
-import { AlertCircle, ArrowLeft, Atom, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
+import {
+  AlertCircle,
+  ArrowLeft,
+  Atom,
+  CheckCircle2,
+  Eye,
+  EyeOff,
+  GraduationCap,
+  LockKeyhole,
+  Mail,
+  ShieldCheck,
+  UserRound,
+} from 'lucide-react';
 import {
   confirmPasswordReset,
   createUserWithEmailAndPassword,
@@ -16,6 +28,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc } from 'firebase/firestore';
 import { useAccess } from '../lib/access-context';
+import { loginAsTeacherWithPassword } from '../lib/teacher-auth';
 import { applySessionPersistence, auth, db, getRememberSession, isFirebaseConfigured, setRememberSession } from '../lib/firebase';
 import { SkeletonBlock } from '../components/Skeleton';
 import './AuthPage.css';
@@ -123,7 +136,7 @@ function GoogleMark() {
 export function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, status, clearProfile } = useAccess();
+  const { profile, status, clearProfile, enter } = useAccess();
   const mode = location.pathname.replace(/^\//, '') as AuthMode;
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
@@ -133,11 +146,16 @@ export function AuthPage() {
   const stateFrom = (location.state as { from?: unknown } | null)?.from;
   const queryFrom = new URLSearchParams(location.search).get('next');
   const returnTo = safeReturnPath(stateFrom ?? queryFrom);
+  const queryRole = new URLSearchParams(location.search).get('role');
 
   const [name, setName] = useState('');
   const [className, setClassName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [teacherPassword, setTeacherPassword] = useState('');
+  const [loginRole, setLoginRole] = useState<'student' | 'teacher'>(
+    queryRole === 'teacher' ? 'teacher' : 'student'
+  );
   const [confirmation, setConfirmation] = useState('');
   const [remember, setRemember] = useState(getRememberSession);
   const [busy, setBusy] = useState(false);
@@ -159,10 +177,46 @@ export function AuthPage() {
   }, [isReset, resetCode]);
 
   useEffect(() => {
-    if (status === 'ready' && profile && auth?.currentUser && !isReset) {
-      navigate(returnTo, { replace: true });
+    if (status === 'ready' && profile && (auth?.currentUser || profile.role === 'teacher') && !isReset) {
+      const dest =
+        returnTo && returnTo !== '/'
+          ? returnTo
+          : profile.role === 'teacher'
+            ? '/kelas'
+            : '/materi';
+      navigate(dest, { replace: true });
     }
   }, [isReset, navigate, profile, returnTo, status]);
+
+  const submitTeacher = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setError('');
+    setNotice('');
+
+    if (!teacherPassword.trim()) {
+      setError('Silakan masukkan sandi khusus guru.');
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const teacherUid = await loginAsTeacherWithPassword(teacherPassword.trim());
+      if (enter) {
+        enter({
+          role: 'teacher',
+          uid: teacherUid,
+          name: 'Guru ATOMIKA',
+        });
+      }
+      const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
+      navigate(dest, { replace: true });
+    } catch (caught: unknown) {
+      const message = caught instanceof Error ? caught.message : 'Sandi guru tidak sesuai';
+      setError(message);
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -199,7 +253,8 @@ export function AuthPage() {
           await signOut(auth);
           throw new Error('Verifikasi email Anda terlebih dahulu sebelum login.');
         }
-        navigate(returnTo, { replace: true });
+        const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
+        navigate(dest, { replace: true });
         return;
       }
 
@@ -277,7 +332,8 @@ export function AuthPage() {
       setRememberSession(remember);
       await applySessionPersistence();
       await signInWithPopup(auth, new GoogleAuthProvider());
-      navigate(returnTo, { replace: true });
+      const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
+      navigate(dest, { replace: true });
     } catch (caught) {
       const authError = caught instanceof Error ? caught : new Error('Google Sign-In gagal dimulai.');
       setError(errorMessage(authError));
@@ -345,11 +401,52 @@ export function AuthPage() {
       <section className="auth-card" aria-labelledby="auth-title">
         <Brand />
 
+        {isLogin && (
+          <div className="mb-4 mt-6 flex rounded-xl border border-[#F1E5D8] bg-[#FFF8F0] p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('student');
+                setError('');
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all sm:text-sm ${
+                loginRole === 'student'
+                  ? 'bg-[#C2410C] text-white shadow-xs'
+                  : 'text-[#475569] hover:bg-orange-50/70 hover:text-[#172033]'
+              }`}
+            >
+              <UserRound size={16} aria-hidden="true" />
+              <span>Masuk sebagai Murid</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setLoginRole('teacher');
+                setError('');
+              }}
+              className={`flex flex-1 items-center justify-center gap-2 rounded-lg px-3 py-2 text-xs font-bold transition-all sm:text-sm ${
+                loginRole === 'teacher'
+                  ? 'bg-[#C2410C] text-white shadow-xs'
+                  : 'text-[#475569] hover:bg-orange-50/70 hover:text-[#172033]'
+              }`}
+            >
+              <GraduationCap size={16} aria-hidden="true" />
+              <span>Masuk sebagai Guru</span>
+            </button>
+          </div>
+        )}
+
         <div className="auth-heading">
           {isLogin && (
             <>
-              <h1 id="auth-title">Selamat Datang Kembali!</h1>
-              <p>Masuk untuk melanjutkan perjalanan belajar kimia Anda.</p>
+              <h1 id="auth-title">
+                {loginRole === 'teacher' ? 'Portal Akses Guru' : 'Selamat Datang Kembali!'}
+              </h1>
+              <p>
+                {loginRole === 'teacher'
+                  ? 'Masukkan sandi khusus guru untuk membuka Dashboard Guru.'
+                  : 'Masuk untuk melanjutkan perjalanan belajar kimia Anda.'}
+              </p>
             </>
           )}
           {isRegister && (
@@ -391,119 +488,168 @@ export function AuthPage() {
           </div>
         )}
 
-        {isLogin && (
+        {isLogin && loginRole === 'teacher' ? (
           <>
-            <button type="button" className="auth-google-button" onClick={() => void signInWithGoogle()} disabled={busy || !isFirebaseConfigured}>
-              <GoogleMark />
-              <span>Login dengan Google</span>
-            </button>
-            <div className="auth-divider"><span>Atau masuk menggunakan email</span></div>
-          </>
-        )}
-
-        <form className="auth-form" onSubmit={(event) => void submit(event)}>
-          {isRegister && (
-            <label className="auth-field" htmlFor="full-name">
-              <span>Nama lengkap</span>
-              <span className="auth-input-wrap">
-                <span className="auth-user-icon" aria-hidden="true">A</span>
-                <input id="full-name" name="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} required />
-              </span>
-            </label>
-          )}
-
-          {isRegister && (
-            <label className="auth-field" htmlFor="class-name">
-              <span>Kelas <span className="auth-optional">(opsional)</span></span>
-              <span className="auth-input-wrap">
-                <span className="auth-user-icon" aria-hidden="true">K</span>
-                <input id="class-name" name="className" type="text" autoComplete="off" maxLength={40} placeholder="Contoh: XI IPA 1" value={className} onChange={(event) => setClassName(event.target.value)} />
-              </span>
-            </label>
-          )}
-
-          {(isLogin || isRegister || isForgot) && (
-            <label className="auth-field" htmlFor="email">
-              <span>Alamat email</span>
-              <span className="auth-input-wrap">
-                <Mail size={18} aria-hidden="true" />
-                <input id="email" name="email" type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} required />
-              </span>
-            </label>
-          )}
-
-          {(isLogin || isRegister || isReset) && (
-            <PasswordField
-              id={isReset ? 'new-password' : 'password'}
-              label={isReset ? 'Kata sandi baru' : 'Kata sandi'}
-              value={password}
-              onChange={setPassword}
-              autoComplete={isLogin ? 'current-password' : 'new-password'}
-            />
-          )}
-
-          {(isRegister || isReset) && (
-            <>
-              <div className="auth-password-rules" aria-live="polite">
-                {passwordRequirements.map(({ label, test }) => (
-                  <span key={label} className={test(password) ? 'is-valid' : ''}>
-                    <CheckCircle2 size={14} aria-hidden="true" /> {label}
-                  </span>
-                ))}
-              </div>
+            <form className="auth-form" onSubmit={(event) => void submitTeacher(event)}>
               <PasswordField
-                id="confirm-password"
-                label="Konfirmasi kata sandi"
-                value={confirmation}
-                onChange={setConfirmation}
-                autoComplete="new-password"
+                id="teacher-password"
+                label="Sandi Khusus Guru"
+                value={teacherPassword}
+                onChange={setTeacherPassword}
+                autoComplete="current-password"
               />
-              <div className="auth-strength" aria-label={`Kekuatan kata sandi: ${strength} dari 4`}>
-                <div className="auth-strength-bars">
-                  {[1, 2, 3, 4].map((level) => <span key={level} className={strength >= level ? `strength-${strength}` : ''} />)}
-                </div>
-                <span>{password ? ['Lemah', 'Lemah', 'Cukup', 'Baik', 'Kuat'][strength] : 'Kekuatan kata sandi'}</span>
+
+              <div className="rounded-xl border border-[#F1E5D8] bg-[#FFF8F0] p-3 text-xs leading-relaxed text-[#64748B]">
+                🔑 Guru dapat langsung mengakses Dashboard Guru menggunakan sandi otorisasi tanpa perlu mendaftarkan email satu per satu.
               </div>
-            </>
-          )}
 
-          {isRegister && (
-            <label className="auth-checkbox">
-              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-              <span>Ingat kata sandi saya</span>
-              <span className="auth-checkbox-note">Sesi diingat di perangkat ini; kata sandi tidak disimpan.</span>
-            </label>
-          )}
+              <button
+                type="submit"
+                className="auth-primary-button"
+                disabled={busy || !isFirebaseConfigured}
+                aria-busy={busy}
+              >
+                {busy ? (
+                  <>
+                    <span className="sr-only">Memvalidasi sandi...</span>
+                    <SkeletonBlock className="skeleton-on-brand h-3.5 w-24 rounded" />
+                  </>
+                ) : (
+                  'Masuk sebagai Guru'
+                )}
+              </button>
+            </form>
 
-          {isLogin && (
-            <div className="auth-form-options">
-              <label className="auth-checkbox">
-                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
-                <span>Ingat saya di perangkat ini</span>
-              </label>
-              <Link to="/forgot-password">Lupa kata sandi?</Link>
-            </div>
-          )}
-
-          <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured} aria-busy={busy}>
-            {busy ? (
+            <p className="auth-switch">
+              <button
+                type="button"
+                onClick={() => {
+                  setLoginRole('student');
+                  setError('');
+                }}
+                className="text-xs font-semibold text-[#B53C0B] hover:underline"
+              >
+                Bukan guru? Masuk sebagai Murid di sini
+              </button>
+            </p>
+          </>
+        ) : (
+          <>
+            {isLogin && (
               <>
-                <span className="sr-only">Memproses...</span>
-                <SkeletonBlock className="skeleton-on-brand h-3.5 w-24 rounded" />
+                <button type="button" className="auth-google-button" onClick={() => void signInWithGoogle()} disabled={busy || !isFirebaseConfigured}>
+                  <GoogleMark />
+                  <span>Login dengan Google</span>
+                </button>
+                <div className="auth-divider"><span>Atau masuk menggunakan email</span></div>
               </>
-            ) : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
-          </button>
-        </form>
+            )}
 
-        {isLogin && (
-          <p className="auth-switch">Belum memiliki akun? <Link to="/register">Daftar Sekarang</Link></p>
-        )}
-        {isRegister && (
-          <p className="auth-switch">Sudah memiliki akun? <Link to="/login">Login</Link></p>
-        )}
-        {isForgot && <BackToLogin />}
-        {isReset && (
-          <p className="auth-security-note"><ShieldCheck size={16} aria-hidden="true" /> Kata sandi dienkripsi dan dikelola oleh sistem autentikasi.</p>
+            <form className="auth-form" onSubmit={(event) => void submit(event)}>
+              {isRegister && (
+                <label className="auth-field" htmlFor="full-name">
+                  <span>Nama lengkap</span>
+                  <span className="auth-input-wrap">
+                    <span className="auth-user-icon" aria-hidden="true">A</span>
+                    <input id="full-name" name="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} required />
+                  </span>
+                </label>
+              )}
+
+              {isRegister && (
+                <label className="auth-field" htmlFor="class-name">
+                  <span>Kelas <span className="auth-optional">(opsional)</span></span>
+                  <span className="auth-input-wrap">
+                    <span className="auth-user-icon" aria-hidden="true">K</span>
+                    <input id="class-name" name="className" type="text" autoComplete="off" maxLength={40} placeholder="Contoh: XI IPA 1" value={className} onChange={(event) => setClassName(event.target.value)} />
+                  </span>
+                </label>
+              )}
+
+              {(isLogin || isRegister || isForgot) && (
+                <label className="auth-field" htmlFor="email">
+                  <span>Alamat email</span>
+                  <span className="auth-input-wrap">
+                    <Mail size={18} aria-hidden="true" />
+                    <input id="email" name="email" type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} required />
+                  </span>
+                </label>
+              )}
+
+              {(isLogin || isRegister || isReset) && (
+                <PasswordField
+                  id={isReset ? 'new-password' : 'password'}
+                  label={isReset ? 'Kata sandi baru' : 'Kata sandi'}
+                  value={password}
+                  onChange={setPassword}
+                  autoComplete={isLogin ? 'current-password' : 'new-password'}
+                />
+              )}
+
+              {(isRegister || isReset) && (
+                <>
+                  <div className="auth-password-rules" aria-live="polite">
+                    {passwordRequirements.map(({ label, test }) => (
+                      <span key={label} className={test(password) ? 'is-valid' : ''}>
+                        <CheckCircle2 size={14} aria-hidden="true" /> {label}
+                      </span>
+                    ))}
+                  </div>
+                  <PasswordField
+                    id="confirm-password"
+                    label="Konfirmasi kata sandi"
+                    value={confirmation}
+                    onChange={setConfirmation}
+                    autoComplete="new-password"
+                  />
+                  <div className="auth-strength" aria-label={`Kekuatan kata sandi: ${strength} dari 4`}>
+                    <div className="auth-strength-bars">
+                      {[1, 2, 3, 4].map((level) => <span key={level} className={strength >= level ? `strength-${strength}` : ''} />)}
+                    </div>
+                    <span>{password ? ['Lemah', 'Lemah', 'Cukup', 'Baik', 'Kuat'][strength] : 'Kekuatan kata sandi'}</span>
+                  </div>
+                </>
+              )}
+
+              {isRegister && (
+                <label className="auth-checkbox">
+                  <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                  <span>Ingat kata sandi saya</span>
+                  <span className="auth-checkbox-note">Sesi diingat di perangkat ini; kata sandi tidak disimpan.</span>
+                </label>
+              )}
+
+              {isLogin && (
+                <div className="auth-form-options">
+                  <label className="auth-checkbox">
+                    <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                    <span>Ingat saya di perangkat ini</span>
+                  </label>
+                  <Link to="/forgot-password">Lupa kata sandi?</Link>
+                </div>
+              )}
+
+              <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured} aria-busy={busy}>
+                {busy ? (
+                  <>
+                    <span className="sr-only">Memproses...</span>
+                    <SkeletonBlock className="skeleton-on-brand h-3.5 w-24 rounded" />
+                  </>
+                ) : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
+              </button>
+            </form>
+
+            {isLogin && (
+              <p className="auth-switch">Belum memiliki akun? <Link to="/register">Daftar Sekarang</Link></p>
+            )}
+            {isRegister && (
+              <p className="auth-switch">Sudah memiliki akun? <Link to="/login">Login</Link></p>
+            )}
+            {isForgot && <BackToLogin />}
+            {isReset && (
+              <p className="auth-security-note"><ShieldCheck size={16} aria-hidden="true" /> Kata sandi dienkripsi dan dikelola oleh sistem autentikasi.</p>
+            )}
+          </>
         )}
       </section>
       <p className="auth-footer">ATOMIKA · Belajar kimia dengan cara yang lebih interaktif</p>
