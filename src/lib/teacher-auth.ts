@@ -191,6 +191,7 @@ export async function loginAsTeacherWithPassword(password: string): Promise<stri
           name: 'Guru ATOMIKA',
           email: TEACHER_EMAIL,
           role: 'teacher',
+          institutionId: 'atomika-sma',
           active: true,
           updatedAt: new Date().toISOString(),
         }, { merge: true });

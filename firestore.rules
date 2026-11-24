@@ -6,35 +6,44 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    function isTeacher() {
+    function profilePath(uid) {
+      return /databases/$(database)/documents/profiles/$(uid);
+    }
+
+    function teacherPath(uid) {
+      return /databases/$(database)/documents/teachers/$(uid);
+    }
+
+    function isValidInstitutionId(value) {
+      return value is string && value.matches('^[A-Za-z0-9_-]{1,80}$');
+    }
+
+    function hasAssignedProfile(uid) {
       return isSignedIn()
-        && exists(/databases/$(database)/documents/teachers/$(request.auth.uid));
+        && request.auth.uid == uid
+        && exists(profilePath(uid))
+        && isValidInstitutionId(get(profilePath(uid)).data.institutionId);
     }
 
-    match /profiles/{userId} {
-      allow read: if request.auth != null && request.auth.uid == userId;
-      allow create, update: if request.auth != null
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['name', 'className'])
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 80
-        && request.resource.data.className is string
-        && request.resource.data.className.size() <= 40;
-      allow delete: if false;
+    function isTeacherFor(institutionId) {
+      return isSignedIn()
+        && isValidInstitutionId(institutionId)
+        && exists(teacherPath(request.auth.uid))
+        && get(teacherPath(request.auth.uid)).data.institutionId == institutionId;
     }
 
-    match /teachers/{teacherUid} {
-      allow get: if isSignedIn() && request.auth.uid == teacherUid;
-      allow list, create, update, delete: if false;
+    function matchesStudentProfile(data, uid) {
+      let profile = get(profilePath(uid)).data;
+      return data.uid == uid
+        && data.institutionId == profile.institutionId
+        && data.className == profile.className;
     }
 
-    match /student_activities/{userId} {
-      allow read: if isTeacher();
-      allow create, update: if isSignedIn()
-        && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly([
+    function validStudentActivity(data, uid) {
+      return hasAssignedProfile(uid)
+        && data.keys().hasOnly([
           'uid',
+          'institutionId',
           'name',
           'className',
           'activity',
@@ -42,8 +51,9 @@ service cloud.firestore {
           'progressSummary',
           'lastSeen'
         ])
-        && request.resource.data.keys().hasAll([
+        && data.keys().hasAll([
           'uid',
+          'institutionId',
           'name',
           'className',
           'activity',
@@ -51,28 +61,25 @@ service cloud.firestore {
           'progressSummary',
           'lastSeen'
         ])
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.name is string
-        && request.resource.data.name.size() > 0
-        && request.resource.data.name.size() <= 80
-        && request.resource.data.className is string
-        && request.resource.data.className.size() <= 40
-        && request.resource.data.activity is string
-        && request.resource.data.activity.size() <= 200
-        && request.resource.data.path is string
-        && request.resource.data.path.size() <= 300
-        && request.resource.data.progressSummary is string
-        && request.resource.data.progressSummary.size() <= 200
-        && request.resource.data.lastSeen is string;
-      allow delete: if false;
+        && matchesStudentProfile(data, uid)
+        && data.name == get(profilePath(uid)).data.name
+        && data.activity is string
+        && data.activity.size() > 0
+        && data.activity.size() <= 200
+        && data.path is string
+        && data.path.size() <= 300
+        && data.progressSummary is string
+        && data.progressSummary.size() <= 200
+        && data.lastSeen is string
+        && data.lastSeen.size() <= 40;
     }
 
-    match /quiz_attempts/{attemptId} {
-      allow read: if isTeacher();
-      allow create: if isSignedIn()
-        && request.resource.data.keys().hasOnly([
+    function validQuizAttempt(data, attemptId) {
+      return hasAssignedProfile(request.auth.uid)
+        && data.keys().hasOnly([
           'id',
           'uid',
+          'institutionId',
           'alias',
           'className',
           'quizTitle',
@@ -89,10 +96,14 @@ service cloud.firestore {
           'submittedAt',
           'serverReceivedAt'
         ])
-        && request.resource.data.keys().hasAll([
+        && data.keys().hasAll([
           'id',
           'uid',
+          'institutionId',
           'alias',
+          'className',
+          'elapsedSeconds',
+          'status',
           'activityName',
           'moduleId',
           'attemptType',
@@ -101,23 +112,87 @@ service cloud.firestore {
           'score',
           'maxScore',
           'percent',
-          'elapsedSeconds',
-          'status',
+          'submittedAt',
           'serverReceivedAt'
         ])
-        && request.resource.data.id == attemptId
-        && request.resource.data.uid == request.auth.uid
-        && request.resource.data.alias is string
-        && request.resource.data.moduleId is string
-        && request.resource.data.activityName is string
-        && request.resource.data.attemptType in ['diagnostic', 'practice']
-        && request.resource.data.questionVersion is string
-        && request.resource.data.answers is map
-        && request.resource.data.answers.size() <= 20
-        && request.resource.data.score is number
-        && request.resource.data.maxScore is number
-        && request.resource.data.percent is number
-        && request.resource.data.serverReceivedAt == request.time;
+        && data.id == attemptId
+        && matchesStudentProfile(data, request.auth.uid)
+        && data.alias == get(profilePath(request.auth.uid)).data.name
+        && data.activityName is string
+        && data.activityName.size() > 0
+        && data.activityName.size() <= 120
+        && (!('quizTitle' in data) || (data.quizTitle is string && data.quizTitle.size() <= 120))
+        && data.moduleId is string
+        && data.moduleId.size() <= 40
+        && data.attemptType in ['diagnostic', 'practice']
+        && data.questionVersion is string
+        && data.questionVersion.size() <= 40
+        && data.answers is map
+        && data.answers.size() <= 20
+        && data.score is number
+        && data.maxScore is number
+        && data.maxScore > 0
+        && data.maxScore <= 100
+        && data.score >= 0
+        && data.score <= data.maxScore
+        && data.percent is number
+        && data.percent >= 0
+        && data.percent <= 100
+        && data.elapsedSeconds is number
+        && data.elapsedSeconds >= 0
+        && data.elapsedSeconds <= 7200
+        && data.status == 'submitted'
+        && data.submittedAt is string
+        && data.submittedAt.size() <= 40
+        && data.serverReceivedAt == request.time;
+    }
+
+    match /profiles/{userId} {
+      allow get: if isSignedIn() && request.auth.uid == userId;
+      allow list: if false;
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'className'])
+        && request.resource.data.keys().hasAll(['name', 'className'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.className is string
+        && request.resource.data.className.size() <= 40;
+      allow update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly(['name', 'className', 'institutionId'])
+        && request.resource.data.keys().hasAll(['name', 'className'])
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['name', 'className'])
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.className is string
+        && request.resource.data.className.size() <= 40
+        && (!resource.data.keys().hasAny(['institutionId'])
+          || (request.resource.data.name == resource.data.name
+            && request.resource.data.className == resource.data.className));
+      allow delete: if false;
+    }
+
+    match /teachers/{teacherUid} {
+      allow get: if isSignedIn() && request.auth.uid == teacherUid;
+      allow list, create, update, delete: if false;
+    }
+
+    match /student_activities/{userId} {
+      allow read: if (isSignedIn() && request.auth.uid == userId)
+        || isTeacherFor(resource.data.institutionId);
+      allow create, update: if request.auth.uid == userId
+        && validStudentActivity(request.resource.data, userId);
+      allow delete: if false;
+    }
+
+    match /quiz_attempts/{attemptId} {
+      allow read: if (isSignedIn() && resource.data.uid == request.auth.uid)
+        || isTeacherFor(resource.data.institutionId);
+      allow create: if isSignedIn()
+        && validQuizAttempt(request.resource.data, attemptId);
       allow update, delete: if false;
     }
   }

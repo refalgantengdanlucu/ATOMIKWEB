@@ -2,9 +2,12 @@ import {
   collection,
   doc,
   onSnapshot,
+  limit,
+  query,
   serverTimestamp,
   setDoc,
   type Timestamp,
+  where,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
 import type { TopicId } from '../types';
@@ -92,7 +95,10 @@ function normalizeAttempt(id: string, value: Record<string, unknown>): TeacherQu
   };
 }
 
-export function subscribeAcceptedAttempts(onChange: (feed: AttemptFeed) => void): () => void {
+export function subscribeAcceptedAttempts(
+  onChange: (feed: AttemptFeed) => void,
+  institutionId: string,
+): () => void {
   if (!db) {
     onChange({
       status: 'error',
@@ -104,15 +110,24 @@ export function subscribeAcceptedAttempts(onChange: (feed: AttemptFeed) => void)
   }
 
   onChange({ status: 'loading', attempts: [], updatedAt: null });
-  return onSnapshot(
+  const attemptsQuery = query(
     collection(db, 'quiz_attempts'),
+    where('institutionId', '==', institutionId),
+    limit(200),
+  );
+  return onSnapshot(
+    attemptsQuery,
     { includeMetadataChanges: true },
     (snapshot) => {
       if (snapshot.metadata.fromCache) return;
 
       const attempts = snapshot.docs
         .filter((document) => !document.metadata.hasPendingWrites)
-        .map((document) => normalizeAttempt(document.id, document.data()));
+        .map((document) => normalizeAttempt(document.id, document.data()))
+        .sort(
+          (left, right) =>
+            (right.serverReceivedAt?.getTime() ?? 0) - (left.serverReceivedAt?.getTime() ?? 0),
+        );
 
       onChange({
         status: attempts.length > 0 ? 'ready' : 'empty',
@@ -151,15 +166,24 @@ export async function saveTopicQuizAttempt({
   percent: number;
   attemptId: string;
   elapsedSeconds: number;
-  studentIdentity: { uid: string | null; name: string; className: string };
+  studentIdentity: {
+    uid: string | null;
+    name: string;
+    className: string;
+    institutionId?: string;
+  };
 }): Promise<void> {
   const user = auth?.currentUser;
   if (!db || !user) throw new Error('Sesi Firebase diperlukan untuk mengirim hasil kuis.');
+  if (!studentIdentity.institutionId) {
+    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
+  }
 
   const attemptRef = doc(db, 'quiz_attempts', attemptId);
   await setDoc(attemptRef, {
     id: attemptRef.id,
     uid: user.uid,
+    institutionId: studentIdentity.institutionId,
     alias: studentIdentity.name || `Siswa-${user.uid.slice(0, 6)}`,
     className: studentIdentity.className,
     quizTitle: activityName,

@@ -206,6 +206,7 @@ export function AuthPage() {
           role: 'teacher',
           uid: teacherUid,
           name: 'Guru ATOMIKA',
+          institutionId: 'atomika-sma',
         });
       }
       const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';

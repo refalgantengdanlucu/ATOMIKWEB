@@ -7,6 +7,7 @@ export interface QuizAttemptRecord {
     uid: string | null;
     name: string;
     className: string;
+    institutionId?: string;
   };
   answers: Record<string, string>;
   questionVersion: string;

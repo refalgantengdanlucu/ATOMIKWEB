@@ -17,10 +17,10 @@ export interface StorageReadResult<T> {
 const memoryStorage = new Map<string, MemoryEntry>();
 let persistentStorageAvailable = true;
 
-function reportStatus(persistent: boolean, key: string, error?: unknown): void {
+function reportStatus(persistent: boolean, _key: string, error?: unknown): void {
   persistentStorageAvailable = persistent;
   if (!persistent && error) {
-    console.warn(`[storage] Penyimpanan browser gagal untuk "${key}":`, error);
+    console.warn('[storage] Penyimpanan browser gagal:', error);
   }
   if (typeof window === 'undefined' || typeof CustomEvent === 'undefined') return;
 
@@ -132,7 +132,7 @@ export function readJsonStorage<T>(key: string, fallback: T): StorageReadResult<
   try {
     return { value: JSON.parse(raw) as T, persistent };
   } catch (error) {
-    console.error(`[storage] Data JSON rusak untuk "${key}":`, error);
+    console.error('[storage] Data JSON rusak:', error);
     return { value: fallback, persistent: removeStorageItem(key) };
   }
 }

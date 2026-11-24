@@ -391,7 +391,12 @@ function createInitialAttempt(topicId: TopicId, profile: ReturnType<typeof useAc
     id: createAttemptId(),
     topicId,
     studentIdentity: profile?.role === 'student'
-      ? { uid: profile.uid, name: profile.name, className: profile.className }
+      ? {
+          uid: profile.uid,
+          name: profile.name,
+          className: profile.className,
+          ...(profile.institutionId ? { institutionId: profile.institutionId } : {}),
+        }
       : profile?.role === 'teacher'
         ? { uid: profile.uid, name: profile.name, className: '' }
         : { uid: null, name: 'Siswa anonim', className: '' },

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { AccessContext, type AccessProfile, type AccessContextValue } from '../lib/access-context';
+import { AccessContext, isValidInstitutionId, type AccessProfile, type AccessContextValue } from '../lib/access-context';
 import { auth, db } from '../lib/firebase';
 
 function readSessionProfile(): AccessProfile | null {
@@ -28,6 +28,7 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     db ? getDoc(doc(db, 'users', user.uid)).catch(() => null) : Promise.resolve(null),
   ]);
   const profile = profileSnapshot?.data();
+  const teacher = teacherSnapshot?.data();
   const userData = userSnapshot?.data();
   const nameValue = profile?.name ?? userData?.name ?? user.displayName;
   const name = typeof nameValue === 'string' && nameValue.trim()
@@ -35,6 +36,7 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     : user.email ?? 'Pengguna ATOMIKA';
 
   const isTeacher =
+    (teacherSnapshot?.exists() && isValidInstitutionId(teacher?.institutionId)) ||
     token?.claims?.role === 'teacher' ||
     profile?.role === 'teacher' ||
     userData?.role === 'teacher' ||
@@ -42,10 +44,16 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     user.email?.toLowerCase() === 'guru.atomika@atomika.id';
 
   if (isTeacher) {
-    return { role: 'teacher', uid: user.uid, name };
+    const institutionId = isValidInstitutionId(teacher?.institutionId)
+      ? teacher.institutionId
+      : 'atomika-sma';
+    return { role: 'teacher', uid: user.uid, name, institutionId };
   }
 
   const classNameValue = profile?.className ?? userData?.className;
+  const institutionId = isValidInstitutionId(profile?.institutionId)
+    ? profile.institutionId
+    : undefined;
   return {
     role: 'student',
     uid: user.uid,
@@ -53,6 +61,7 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     className: typeof classNameValue === 'string' && classNameValue.trim()
       ? classNameValue.trim()
       : 'Belum diatur',
+    ...(institutionId ? { institutionId } : {}),
   };
 }
 

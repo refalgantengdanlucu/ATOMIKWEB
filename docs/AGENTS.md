@@ -23,9 +23,10 @@ Dokumen ini mendefinisikan peran, batasan, keputusan terkunci, dan alur kerja AI
 5. **Representasi Visual:** Model Bohr disederhanakan (kapasitas 2, 8, 8, sisanya kulit ke-4) dan **wajib** mencantumkan label bahwa ini adalah representasi penyederhanaan bukan skala sebenarnya.
 6. **Desain & Aksesibilitas:** Menggunakan konsep *Atomic Orange — Warm Science* dengan kontras teks tombol utama (`#C2410C`) memenuhi standar WCAG AA ($\ge 4.5:1$).
 
-7. **Integrasi eksternal:** Firebase Authentication dan Firestore hanya aktif bila konfigurasi environment tersedia. Aturan pada `firestore.rules` harus dipublikasikan ke proyek Firebase secara terpisah. Sinkronisasi Google Sheets belum aktif selama URL Web App kosong; PIN sisi klien tidak boleh dipakai untuk melindungi data sensitif.
+7. **Identitas & akses data:** Firebase Authentication menetapkan UID. Peran guru berasal dari `teachers/{uid}` yang hanya dikelola administrator; `institutionId` siswa dan guru ditetapkan tepercaya, tidak pernah dari klien. Rules Firestore harus membatasi pemilik UID dan institusi. Jangan mengklaim aman sebelum rules diuji di Emulator dan dipublikasikan ke proyek yang benar.
+8. **Integrasi eksternal:** Sinkronisasi Google Sheets lama dinonaktifkan karena tidak memverifikasi Firebase ID token. Jangan mengaktifkannya kembali tanpa backend yang memvalidasi token dan otorisasi setiap permintaan.
 
-8. **Routing dan hosting:** Semua rute internal memakai path React Router di dalam hash, misalnya `/#/materi`; jangan mengubah ke `BrowserRouter` tanpa persetujuan dan konfigurasi fallback hosting yang teruji.
+9. **Routing dan hosting:** Semua rute internal memakai path React Router di dalam hash, misalnya `/#/materi`; jangan mengubah ke `BrowserRouter` tanpa persetujuan dan konfigurasi fallback hosting yang teruji.
 
 ---
 

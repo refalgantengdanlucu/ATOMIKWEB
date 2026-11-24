@@ -122,7 +122,7 @@ function AttemptDetails({ attempt, onClose }: { attempt: TeacherQuizAttempt; onC
   );
 }
 
-export function TeacherDashboard() {
+export function TeacherDashboard({ institutionId }: { institutionId: string }) {
   const [feed, setFeed] = useState<AttemptFeed>(EMPTY_FEED);
   const [moduleFilter, setModuleFilter] = useState('all');
   const [activityFilter, setActivityFilter] = useState('all');
@@ -130,7 +130,7 @@ export function TeacherDashboard() {
   const [versionFilter, setVersionFilter] = useState('all');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  useEffect(() => subscribeAcceptedAttempts(setFeed), []);
+  useEffect(() => subscribeAcceptedAttempts(setFeed, institutionId), [institutionId]);
 
   const filteredAttempts = useMemo(
     () => feed.attempts.filter((attempt) =>

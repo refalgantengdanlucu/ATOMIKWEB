@@ -1,22 +1,17 @@
 import {
   collection,
   doc,
+  getDoc,
   setDoc,
   onSnapshot,
   query,
-  orderBy,
   limit,
   serverTimestamp,
+  where,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
-import type {
-  AttendanceRecord,
-  PollResponse,
-  StudentActivity,
-  StudentProgress,
-} from './classroom';
-import { normalizeStudentName } from './classroom';
-import type { TrackedQuizResult } from './classroom-sync';
+import { isValidInstitutionId } from './access-context';
+import type { StudentActivity, TrackedQuizResult } from './classroom';
 
 /**
  * Menyimpan aktivitas siswa ke koleksi 'student_activities'.
@@ -24,6 +19,12 @@ import type { TrackedQuizResult } from './classroom-sync';
 export async function saveStudentActivity(activity: StudentActivity): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
   if (!activity.uid) throw new Error('UID siswa diperlukan untuk menyimpan aktivitas.');
+  if (!auth?.currentUser || auth.currentUser.uid !== activity.uid) {
+    throw new Error('Sesi Firebase tidak cocok dengan pemilik aktivitas.');
+  }
+  if (!isValidInstitutionId(activity.institutionId)) {
+    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
+  }
   const activityRef = doc(db, 'student_activities', activity.uid);
   await setDoc(activityRef, activity, { merge: true });
 }
@@ -32,27 +33,31 @@ export async function saveStudentActivity(activity: StudentActivity): Promise<vo
  * Berlangganan (realtime listener) data aktivitas siswa untuk tampilan guru.
  */
 export function subscribeStudentActivities(
-  callback: (activities: StudentActivity[]) => void
+  callback: (activities: StudentActivity[]) => void,
+  institutionId: string,
 ): () => void {
-  if (!db || !isFirebaseConfigured) {
+  if (!db || !isFirebaseConfigured || !isValidInstitutionId(institutionId)) {
     callback([]);
     return () => {};
   }
 
-  const q = query(collection(db, 'student_activities'), orderBy('lastSeen', 'desc'), limit(100));
+  const q = query(
+    collection(db, 'student_activities'),
+    where('institutionId', '==', institutionId),
+    limit(100),
+  );
   return onSnapshot(
     q,
     (snapshot) => {
       const items: StudentActivity[] = [];
       snapshot.forEach((d) => items.push(d.data() as StudentActivity));
-      callback(items);
+      callback(items.sort((a, b) => Date.parse(b.lastSeen) - Date.parse(a.lastSeen)));
     },
     (error) => {
       console.error('Gagal mengambil data aktivitas dari Firebase:', error);
     }
   );
 }
-
 /**
  * Menyimpan hasil pengerjaan kuis ke koleksi 'quiz_attempts'.
  */
@@ -60,13 +65,24 @@ export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void>
   if (!db || !isFirebaseConfigured) throw new Error('Firestore belum dikonfigurasi untuk menyimpan hasil kuis.');
   const user = auth?.currentUser;
   if (!user) throw new Error('Sesi Firebase diperlukan untuk menyimpan hasil kuis.');
+  const profileSnapshot = await getDoc(doc(db, 'profiles', user.uid));
+  const profile = profileSnapshot.data();
+  if (
+    !profileSnapshot.exists() ||
+    !isValidInstitutionId(profile?.institutionId) ||
+    typeof profile.name !== 'string' ||
+    typeof profile.className !== 'string'
+  ) {
+    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
+  }
 
   const attemptRef = doc(collection(db, 'quiz_attempts'));
   await setDoc(attemptRef, {
     id: attemptRef.id,
     uid: user.uid,
-    alias: `Siswa-${user.uid.slice(0, 6)}`,
-    className: attempt.className,
+    institutionId: profile.institutionId,
+    alias: profile.name,
+    className: profile.className,
     quizTitle: attempt.quizTitle,
     activityName: attempt.quizTitle,
     moduleId: 'classroom',
@@ -85,83 +101,28 @@ export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void>
  * Berlangganan data hasil kuis secara realtime.
  */
 export function subscribeQuizAttempts(
-  callback: (results: TrackedQuizResult[]) => void
+  callback: (results: TrackedQuizResult[]) => void,
+  institutionId: string,
 ): () => void {
-  if (!db || !isFirebaseConfigured) {
+  if (!db || !isFirebaseConfigured || !isValidInstitutionId(institutionId)) {
     callback([]);
     return () => {};
   }
 
-  const q = query(collection(db, 'quiz_attempts'), orderBy('submittedAt', 'desc'), limit(150));
+  const q = query(
+    collection(db, 'quiz_attempts'),
+    where('institutionId', '==', institutionId),
+    limit(150),
+  );
   return onSnapshot(
     q,
     (snapshot) => {
       const items: TrackedQuizResult[] = [];
       snapshot.forEach((d) => items.push(d.data() as TrackedQuizResult));
-      callback(items);
+      callback(items.sort((a, b) => Date.parse(b.submittedAt) - Date.parse(a.submittedAt)));
     },
     (error) => {
       console.error('Gagal mengambil data kuis dari Firebase:', error);
     }
   );
-}
-
-/**
- * Menyimpan presensi kehadiran siswa ke koleksi 'attendance'.
- */
-export async function saveAttendance(record: AttendanceRecord): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const docId = `${record.date}_${normalizeStudentName(record.name)}`;
-  const attendanceRef = doc(db, 'attendance', docId);
-  await setDoc(attendanceRef, record, { merge: true });
-}
-
-/**
- * Berlangganan data presensi untuk tanggal tertentu.
- */
-export function subscribeAttendance(
-  dateKey: string,
-  callback: (records: AttendanceRecord[]) => void
-): () => void {
-  if (!db || !isFirebaseConfigured) {
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(collection(db, 'attendance'), orderBy('checkedInAt', 'asc'), limit(200));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: AttendanceRecord[] = [];
-      snapshot.forEach((d) => {
-        const data = d.data() as AttendanceRecord;
-        if (data.date === dateKey) {
-          items.push(data);
-        }
-      });
-      callback(items);
-    },
-    (error) => {
-      console.error('Gagal mengambil data presensi dari Firebase:', error);
-    }
-  );
-}
-
-/**
- * Menyimpan respon polling siswa ke koleksi 'classroom_polls'.
- */
-export async function savePollResponse(sessionId: string, response: PollResponse): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const pollRef = doc(db, 'classroom_polls', `${sessionId}_${response.id}`);
-  await setDoc(pollRef, { sessionId, ...response }, { merge: true });
-}
-
-/**
- * Menyimpan progres tugas laporan praktikum siswa ke koleksi 'student_progress'.
- */
-export async function saveStudentProgress(progress: StudentProgress): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const docId = normalizeStudentName(progress.name);
-  const progressRef = doc(db, 'student_progress', docId);
-  await setDoc(progressRef, progress, { merge: true });
 }
