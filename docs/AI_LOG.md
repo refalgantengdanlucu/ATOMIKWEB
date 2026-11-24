@@ -24,7 +24,7 @@ Lihat [`../TESTING.md`](../TESTING.md) untuk langkah, hasil aktual, dan batas ca
 
 ### Batas bukti
 
-Konfigurasi `.env.example` masih berisi nilai contoh, konfigurasi URL Google Apps Script di kode kosong, dan tidak ada bukti deployment hosting atau publikasi `firestore.rules` dari repositori. Karena itu login sungguhan, database jarak jauh, Google Sheets, serta hosting produksi tidak dianggap teruji.
+Konfigurasi `.env.example` masih berisi nilai contoh, sinkronisasi Google Sheets dinonaktifkan, dan tidak ada bukti deployment hosting atau publikasi `firestore.rules` dari repositori. Karena itu login sungguhan, database jarak jauh, endpoint Apps Script lama, serta hosting produksi tidak dianggap teruji.
 
 ## 24 November 2026 — login wajib dan revisi hero
 
@@ -53,3 +53,26 @@ Pada awal perubahan login, checkout tidak memiliki `.env.local` dan `.env.exampl
 - `npm run build` lulus dengan konfigurasi tersebut. Preview browser tidak lagi menampilkan peringatan konfigurasi dan tombol Google/email login aktif; tidak ada error console/page.
 - `npm test`: 8 file, 46 test lulus. `npm run lint`: exit 0 dengan dua warning dependency hook yang sama.
 - Belum melakukan sign-in Google memakai akun pengguna dan belum menguji baca/tulis Firestore atau rules yang dipublikasikan. Status Google provider, authorized domain deployment, dan database harus dipastikan di Firebase Console.
+
+## 24 November 2026 — pembatasan role dan data Firebase
+
+### Perubahan
+
+- Menyatukan sumber role guru pada dokumen `teachers/{uid}` yang dikelola administrator Firebase dan memiliki `institutionId`; custom claim atau PIN di frontend tidak memberi hak guru.
+- Menambahkan Rules Firestore untuk menjaga profil, aktivitas, dan hasil kuis berdasarkan UID dan institusi. Klien tidak dapat membuat keanggotaan guru atau menetapkan `institutionId`.
+- Membatasi query dashboard guru dengan `institutionId`; data lama tanpa pemetaan institusi tidak otomatis ditampilkan.
+- Memisahkan key penyimpanan fitur kelas berdasarkan UID. Polling, presensi, dan progres laporan kelas tetap bersifat lokal per browser/akun, bukan sinkronisasi lintas perangkat.
+- Menonaktifkan sinkronisasi Sheets lama; source `google-apps-script/Code.gs` kini menolak request GET/POST. Deployment Apps Script yang pernah diterbitkan perlu dicabut atau diperbarui terpisah.
+- Menambahkan suite Firestore Rules Emulator dan dokumentasi migrasi aditif. Tidak ada perubahan pada database produksi.
+
+### Validasi dan batas bukti
+
+- `npm test -- --run`: 9 file dan 48 test lulus.
+- `npm run lint`: exit 0 dengan dua warning dependency hook di `src/components/AccessGate.tsx`.
+- `npm run build`: berhasil; Vite melaporkan bundle JavaScript sekitar 1.227 kB, di atas ambang warning 500 kB.
+- `git diff --check`: lulus.
+- `npm run test:rules`: terblokir sebelum emulator berjalan karena Java tidak tersedia; Firebase CLI tidak ditemukan dan instalasi via `npx` belum selesai.
+- Tidak ada autentikasi nyata, database staging/produksi, publikasi Rules, atau deployment hosting yang diuji. Skor kuis masih dikirim dari klien; Rules membatasi identitas dan rentang payload tetapi tidak menghitung ulang jawaban dengan kunci privat server.
+- Sebelum data lintas perangkat tersedia, administrator harus memetakan `institutionId` yang benar pada profil siswa dan dokumen guru dengan sarana tepercaya. Record lawas tidak dipetakan otomatis.
+
+Lihat [`../TESTING.md`](../TESTING.md) untuk langkah dan status uji per kasus.

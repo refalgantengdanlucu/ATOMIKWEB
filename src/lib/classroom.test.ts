@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import {
   getLocalDateKey,
   getStudentActivityKey,
+  getUserClassroomStorageKey,
   normalizeStudentName,
   POLL_OPTIONS,
   PROGRESS_STAGES,
@@ -28,6 +29,11 @@ describe('classroom activity defaults', () => {
     expect(getStudentActivityKey({ ...first, uid: undefined })).toBe(
       'legacy:siti aminah|x ipa 1'
     );
+  });
+
+  it('namespaces classroom storage by Firebase UID', () => {
+    expect(getUserClassroomStorageKey('atomika-classroom-quiz-v1', 'student-a'))
+      .not.toBe(getUserClassroomStorageKey('atomika-classroom-quiz-v1', 'student-b'));
   });
 
   it('formats the local date without converting it to UTC', () => {

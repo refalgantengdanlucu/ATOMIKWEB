@@ -1,27 +1,31 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { AccessContext, type AccessProfile, type AccessContextValue } from '../lib/access-context';
+import { AccessContext, isValidInstitutionId, type AccessProfile, type AccessContextValue } from '../lib/access-context';
 import { auth, db } from '../lib/firebase';
 
 async function profileFromUser(user: User | null): Promise<AccessProfile | null> {
   if (!user) return null;
 
-  const [token, profileSnapshot] = await Promise.all([
-    user.getIdTokenResult(),
+  const [profileSnapshot, teacherSnapshot] = await Promise.all([
     db ? getDoc(doc(db, 'profiles', user.uid)) : Promise.resolve(null),
+    db ? getDoc(doc(db, 'teachers', user.uid)) : Promise.resolve(null),
   ]);
   const profile = profileSnapshot?.data();
+  const teacher = teacherSnapshot?.data();
   const nameValue = profile?.name ?? user.displayName;
   const name = typeof nameValue === 'string' && nameValue.trim()
     ? nameValue.trim()
     : user.email ?? 'Pengguna ATOMIKA';
 
-  if (token.claims.role === 'teacher') {
-    return { role: 'teacher', uid: user.uid, name };
+  if (teacherSnapshot?.exists() && isValidInstitutionId(teacher?.institutionId)) {
+    return { role: 'teacher', uid: user.uid, name, institutionId: teacher.institutionId };
   }
 
   const classNameValue = profile?.className;
+  const institutionId = isValidInstitutionId(profile?.institutionId)
+    ? profile.institutionId
+    : undefined;
   return {
     role: 'student',
     uid: user.uid,
@@ -29,6 +33,7 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     className: typeof classNameValue === 'string' && classNameValue.trim()
       ? classNameValue.trim()
       : 'Belum diatur',
+    ...(institutionId ? { institutionId } : {}),
   };
 }
 

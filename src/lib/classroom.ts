@@ -1,6 +1,5 @@
 import { readJsonStorage, writeJsonStorage } from './safe-storage';
 
-export const TEACHER_PIN = '122333';
 export const CLASSROOM_STORAGE_KEYS = {
   quiz: 'atomika-classroom-quiz-v1',
   poll: 'atomika-classroom-poll-v1',
@@ -101,6 +100,15 @@ export interface QuizAttempt {
   quizTitle?: string;
 }
 
+export interface TrackedQuizResult extends QuizAttempt {
+  uid?: string;
+  institutionId?: string;
+  className: string;
+  quizTitle: string;
+  maxScore: number;
+  percent: number;
+}
+
 export interface PollResponse {
   id: string;
   optionIndex: number;
@@ -127,12 +135,17 @@ export interface StudentProgress {
 
 export interface StudentActivity {
   uid?: string;
+  institutionId?: string;
   name: string;
   className: string;
   activity: string;
   path: string;
   progressSummary: string;
   lastSeen: string;
+}
+
+export function getUserClassroomStorageKey(key: string, uid: string): string {
+  return `${key}:uid:${uid}`;
 }
 
 export function normalizeStudentName(name: string): string {
@@ -164,7 +177,7 @@ export function writeClassroomData<T>(key: string, value: T): boolean {
     try {
       window.dispatchEvent(new CustomEvent('classroom-storage-update'));
     } catch (error) {
-      console.error(`Gagal memperbarui tampilan data kelas (${key}):`, error);
+      console.error('Gagal memperbarui tampilan data kelas:', error);
     }
   }
   return persisted;

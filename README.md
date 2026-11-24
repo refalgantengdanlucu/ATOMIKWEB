@@ -52,19 +52,9 @@ Siswa membuka materi secara berurutan; seluruh bagian Topik 1–3 harus dibaca s
 
 ## Kegiatan Kelas
 
-Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Tahapan progres, pertanyaan polling, bank soal, daftar nama guru, dan PIN dapat diedit pada `src/lib/classroom.ts`.
+Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Data fitur tersebut disimpan lokal per UID pada browser ini. Aktivitas belajar dan hasil kuis utama dapat disinkronkan ke Firestore setelah akun ditetapkan ke institusi oleh administrator.
 
-Data lokal disimpan di browser. Untuk merekap aktivitas lintas perangkat, proyek menyediakan Google Apps Script di `google-apps-script/Code.gs` yang menghubungkan spreadsheet dan mencatat aktivitas terakhir, riwayat perpindahan halaman, progres laporan, serta hasil kuis. Polling tetap lokal dan belum disinkronkan lintas perangkat. Gerbang PIN di sisi klien adalah penghalang kasual, bukan kontrol akses yang aman untuk data sensitif.
-
-### Menghubungkan Google Sheets
-
-1. Buka spreadsheet kelas, pilih **Ekstensi → Apps Script**, lalu salin isi `google-apps-script/Code.gs` ke editor Apps Script dan simpan. Script sudah memuat ID spreadsheet yang diberikan untuk proyek ini.
-2. Pilih **Deploy → New deployment → Web app**. Jalankan aplikasi sebagai akun pemilik spreadsheet dan atur akses ke **Anyone** agar browser siswa dapat mengirim data tanpa login Google. Tinjau implikasi akses publik: PIN ini hanya penghalang kasual; jangan simpan data sensitif.
-3. Deploy, izinkan akses saat diminta, lalu salin URL Web App yang berakhiran `/exec`.
-4. Tempel URL tersebut ke `CLASSROOM_SHEETS_WEB_APP_URL` pada `src/lib/classroom-sync.ts`, lalu build dan deploy ulang aplikasi.
-5. Setelah tersambung, tab **Aktivitas Siswa** menampilkan nama, kelas, halaman/topik terakhir, ringkasan progres materi, dan waktu terakhir aktif. Tab **Progres Tugas** dan **Kuis Reaksi** membaca data bersama dari spreadsheet; hasil kuis juga dicatat di tab `Hasil Kuis`. Dashboard memperbarui data cloud setiap 30 detik atau lewat tombol **Segarkan**.
-
-URL spreadsheet saja belum mengaktifkan sinkronisasi; koneksi baru aktif setelah Web App Apps Script di-deploy dan URL `/exec` diisi pada konfigurasi aplikasi.
+Sinkronisasi Google Sheets sengaja dinonaktifkan. Endpoint Apps Script lama tidak memverifikasi identitas Firebase dan tidak aman untuk menerima atau menampilkan data siswa. `google-apps-script/Code.gs` kini menolak permintaan. Jika pernah ada deployment Web App sebelumnya, hapus deployment atau cabut akses publik di Apps Script; mengubah file source saja tidak menonaktifkan deployment lama.
 
 ## Autentikasi
 
@@ -76,14 +66,20 @@ Di Firebase Console:
 
 1. Aktifkan **Authentication → Sign-in method → Email/Password** dan **Google**. Untuk Google, isi alamat email dukungan proyek.
 2. Pada **Authentication → Settings → Authorized domains**, tambahkan domain lokal dan domain deployment.
-3. Aktifkan Cloud Firestore, lalu salin aturan dari `firestore.rules` ke **Firestore → Rules** dan publish. Profil siswa disimpan di `profiles/{uid}` dan hanya dapat dibaca/ditulis oleh pemilik akun.
-4. Akun baru menjadi siswa secara default. Akun guru harus ditetapkan melalui custom claim `role: "teacher"` memakai Firebase Admin SDK pada lingkungan tepercaya. Jangan menetapkan role dari browser atau dari dokumen profil Firestore.
+3. Aktifkan Cloud Firestore. Jalankan `npm run test:rules` pada lingkungan dengan Firebase CLI dan Java, lalu salin `firestore.rules` ke **Firestore → Rules** dan publish setelah hasil emulator lulus.
+4. Akun biasa menjadi siswa. Dokumen `profiles/{uid}` dibuat oleh pemilik akun dengan nama dan kelas, tetapi `institutionId` hanya boleh ditetapkan administrator melalui Firebase Console atau Admin SDK di lingkungan tepercaya.
+5. Tetapkan guru dengan membuat `teachers/{uid}` berisi `institutionId` melalui Firebase Console atau Admin SDK. Dokumen tersebut adalah satu-satunya sumber peran guru; klien tidak dapat membuat atau mengubah keanggotaan guru.
+6. Gunakan ID institusi kanonis yang hanya berisi huruf, angka, `_` atau `-` (maksimum 80 karakter), lalu berikan ID yang sama kepada profil siswa dan guru yang satu institusi. Jangan memetakan data lama berdasarkan nama saja.
 
-Sesi dan token dikelola Firebase Authentication, bukan kata sandi yang disimpan aplikasi. Opsi **Ingat saya di perangkat ini** mengatur apakah sesi browser bertahan setelah tab ditutup. Lupa kata sandi dan verifikasi email memakai tautan Firebase; pastikan template email dan domain pengalihan dikonfigurasi untuk domain deployment. Tanpa `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, dan `VITE_FIREBASE_APP_ID`, autentikasi tidak dapat digunakan.
+Sesi dan token dikelola Firebase Authentication, bukan kata sandi yang disimpan aplikasi. Opsi **Ingat saya di perangkat ini** mengatur persistensi sesi browser. Lupa kata sandi dan verifikasi email memakai tautan Firebase. Nilai `VITE_FIREBASE_*` adalah konfigurasi Web yang dapat terlihat di browser, bukan kredensial Admin; jangan masukkan service-account key atau rahasia Admin SDK ke frontend.
 
-Pembatasan rute guru/siswa di website memakai custom claim pada token Firebase. Integrasi Google Sheets lama tetap memakai PIN bersama pada Apps Script dan berjalan terpisah dari Firebase; PIN tersebut bukan kontrol akses yang aman untuk data sensitif. Lindungi spreadsheet/deployment secara terpisah sebelum menggunakannya untuk data privat.
+Aturan Firestore membatasi siswa pada dokumen dengan UID Firebase mereka dan membatasi guru pada dokumen yang `institutionId`-nya sama dengan dokumen keanggotaan guru. Query dashboard juga harus memfilter `institutionId`. Pengguna tanpa penetapan institusi tetap dapat memakai fitur lokal, tetapi penyimpanan Firestore dan akses guru lintas perangkat belum tersedia untuk akun tersebut.
 
-Akun yang sebelumnya hanya ada di Supabase tidak otomatis dipindahkan ke Firebase; migrasi akun lama perlu ditangani terpisah.
+### Migrasi dan pengujian keamanan
+
+Perubahan skema bersifat aditif dan tetap memakai Firebase: tambahkan `institutionId` pada `profiles/{uid}`, `teachers/{uid}`, `student_activities/{uid}`, dan `quiz_attempts/{attemptId}`. Data lama tanpa institusi tidak otomatis dimasukkan ke institusi mana pun. Administrator harus memeriksa identitas UID dan memetakan dokumen secara manual sebelum data itu muncul di dashboard. Uji rules menggunakan project emulator `demo-atomika-security`; jangan menjalankan test dengan data produksi.
+
+Rules di repositori belum sama dengan rules yang aktif sampai dipublikasikan di Firebase Console/CLI. Emulator lokal menguji file rules, bukan deployment produksi. Login, operasi Firestore, dan rules produksi tetap membutuhkan proyek staging serta akun uji.
 
 ## Laboratorium Virtual
 

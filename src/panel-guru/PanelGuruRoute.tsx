@@ -1,9 +1,11 @@
 import { Navigate } from 'react-router-dom';
 import { TeacherDashboard } from './TeacherDashboard';
 import { useTeacherAccess } from './useTeacherAccess';
+import { useAccess } from '../lib/access-context';
 
 export function PanelGuruRoute() {
   const access = useTeacherAccess();
+  const { profile } = useAccess();
 
   if (access === 'checking') {
     return (
@@ -13,6 +15,6 @@ export function PanelGuruRoute() {
     );
   }
 
-  if (access !== 'allowed') return <Navigate to="/" replace />;
-  return <TeacherDashboard />;
+  if (access !== 'allowed' || profile?.role !== 'teacher') return <Navigate to="/" replace />;
+  return <TeacherDashboard institutionId={profile.institutionId} />;
 }

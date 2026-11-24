@@ -100,7 +100,7 @@ export function getProgressForKey(storageKey: string): LocalProgress {
     }
     return DEFAULT_PROGRESS;
   } catch (err) {
-    console.warn(`[progress] Gagal membaca ${storageKey}:`, err);
+    console.warn('[progress] Gagal membaca progres:', err);
     return DEFAULT_PROGRESS;
   }
 }
@@ -123,7 +123,7 @@ export function saveProgressForKey(storageKey: string, progress: LocalProgress):
       new CustomEvent(PROGRESS_EVENT_NAME, { detail: { storageKey, progress: updated } })
     );
   } catch (err) {
-    console.error(`[progress] Gagal menyimpan ${storageKey}:`, err);
+    console.error('[progress] Gagal menyimpan progres:', err);
   }
 }
 

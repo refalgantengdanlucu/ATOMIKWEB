@@ -17,7 +17,10 @@ Jika dokumen dan kode berbeda, catat perbedaan di backlog, jangan mengarang peri
 - Pertahankan cakupan tiga topik, 17 bagian materi, unsur Z = 1–20, tiga paket kuis, dan larangan materi konfigurasi elektron.
 - Progres dan draf kuis harus memakai storage key yang diturunkan dari UID Firebase. Jangan menyatukan akun berdasarkan nama atau kelas.
 - Data lama tanpa UID tidak boleh otomatis diklaim sebagai milik akun tertentu.
-- Batasi akses guru lewat pemeriksaan akses aplikasi serta aturan Firestore; pemeriksaan UI bukan pengganti aturan server.
+- Peran guru hanya berasal dari dokumen `teachers/{uid}` yang dikelola administrator dan memiliki `institutionId`; custom claim atau PIN di frontend bukan sumber otorisasi.
+- `institutionId` pada profil siswa hanya dapat ditetapkan administrator. Jangan memberi peran atau cakupan institusi dari form atau storage klien.
+- Batasi query guru dan aturan Firestore pada `institutionId` yang sama. Pemeriksaan UI bukan pengganti aturan server; perubahan rules belum aman untuk produksi sebelum diuji di Emulator dan dipublikasikan.
+- Google Apps Script lama ditolak/dinonaktifkan. Jangan mengaktifkannya kembali tanpa verifikasi Firebase ID token di server.
 - Jangan mengklaim login, database, hosting produksi, atau sinkronisasi Google Sheets berhasil sebelum diuji pada konfigurasi yang benar-benar aktif.
 - Error penyimpanan atau sinkronisasi harus ditampilkan/dicatat, bukan disamarkan sebagai sukses.
 

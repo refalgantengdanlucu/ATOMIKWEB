@@ -47,7 +47,7 @@ Masalah berikut adalah **hipotesis kebutuhan** yang perlu dikonfirmasi lewat obs
 | Aspek | Keputusan |
 |---|---|
 | Stack | React 18 + TypeScript + Vite + Tailwind CSS. React Router memakai `HashRouter` (aman untuk hosting statis). Vitest untuk logika |
-| Backend | Konten di `src/data`, progres di browser per UID. Firebase Authentication wajib dikonfigurasi untuk akses aplikasi; Firestore digunakan untuk fitur sinkronisasi yang mengandalkannya |
+| Backend | Konten di `src/data`, progres utama di browser per UID. Firebase Authentication wajib; Firestore menyimpan aktivitas/hasil yang disinkronkan. Profil/keanggotaan guru dan `institutionId` ditetapkan administrator; rules membatasi owner UID dan akses guru pada institusi yang sama. |
 | Visual | SVG + komponen React. Tanpa LaTeX/KaTeX. Notasi atom dibuat komponen `AtomNotation` (A di atas, Z di bawah, simbol) |
 | Cakupan unsur | **Z = 1–20 untuk seluruh fitur** (Lab, kalkulator, simulator ion, kuis) |
 | Konfigurasi elektron | **Tidak dimasukkan.** Tidak ada materi, soal, atau latihan konfigurasi elektron, subkulit, orbital, atau bilangan kuantum |

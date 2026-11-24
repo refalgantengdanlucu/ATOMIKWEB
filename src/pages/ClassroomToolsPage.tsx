@@ -21,19 +21,15 @@ import {
   REACTION_TYPES,
   readClassroomData,
   getStudentActivityKey,
+  getUserClassroomStorageKey,
   writeClassroomData,
 } from '../lib/classroom';
-import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress } from '../lib/classroom';
+import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress, TrackedQuizResult } from '../lib/classroom';
 import { useAccess } from '../lib/access-context';
 import { getStorageItem, setStorageItem } from '../lib/safe-storage';
-import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
-import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
 import { SkeletonBlock, SkeletonTable } from '../components/Skeleton';
 import {
-  saveAttendance,
-  savePollResponse,
   saveQuizAttempt,
-  saveStudentProgress,
   subscribeQuizAttempts,
   subscribeStudentActivities,
 } from '../lib/firebase-db';
@@ -137,18 +133,6 @@ function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
   URL.revokeObjectURL(url);
 }
 
-function mergeStudentProgress(local: StudentProgress[], remote: StudentProgress[]): StudentProgress[] {
-  const records = new Map<string, StudentProgress>();
-  for (const student of [...local, ...remote]) {
-    const key = `${normalizeStudentName(student.name)}|${normalizeStudentName(student.className ?? '')}`;
-    const existing = records.get(key);
-    if (!existing || Date.parse(student.updatedAt) > Date.parse(existing.updatedAt)) records.set(key, student);
-  }
-  return [...records.values()].sort(
-    (a, b) => a.completedStages.length - b.completedStages.length || a.name.localeCompare(b.name, 'id'),
-  );
-}
-
 export function ClassroomToolsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const requestedTab = searchParams.get('aktivitas');
@@ -156,7 +140,7 @@ export function ClassroomToolsPage() {
     TEACHER_TABS.some((tab) => tab.id === requestedTab) ? requestedTab as ActivityTab : 'quiz',
   );
   const [storageError, setStorageError] = useState('');
-  const [refreshKey, setRefreshKey] = useState(0);
+  const [, setRefreshKey] = useState(0);
   const { profile } = useAccess();
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
@@ -176,7 +160,8 @@ export function ClassroomToolsPage() {
   }, [refresh]);
 
   const save = useCallback((key: string, value: unknown) => {
-    const persisted = writeClassroomData(key, value);
+    if (!profile) return false;
+    const persisted = writeClassroomData(getUserClassroomStorageKey(key, profile.uid), value);
     if (!persisted) {
       setStorageError('Data tersimpan sementara di memori aplikasi karena penyimpanan browser tidak tersedia. Data ini akan hilang saat halaman ditutup.');
     } else {
@@ -184,15 +169,16 @@ export function ClassroomToolsPage() {
     }
     refresh();
     return true;
-  }, [refresh]);
+  }, [profile, refresh]);
 
   if (!profile) return null;
 
-  const quizAttempts = readClassroomData<QuizAttempt[]>(CLASSROOM_STORAGE_KEYS.quiz, []);
-  const pollSession = readClassroomData<PollSession>(CLASSROOM_STORAGE_KEYS.poll, { id: 'poll-1', responses: [] });
-  const attendanceRecords = readClassroomData<AttendanceRecord[]>(CLASSROOM_STORAGE_KEYS.attendance, []);
-  const studentProgress = readClassroomData<StudentProgress[]>(CLASSROOM_STORAGE_KEYS.progress, []);
-  const activityRecords = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
+  const localKey = (key: string) => getUserClassroomStorageKey(key, profile.uid);
+  const quizAttempts = readClassroomData<QuizAttempt[]>(localKey(CLASSROOM_STORAGE_KEYS.quiz), []);
+  const pollSession = readClassroomData<PollSession>(localKey(CLASSROOM_STORAGE_KEYS.poll), { id: 'poll-1', responses: [] });
+  const attendanceRecords = readClassroomData<AttendanceRecord[]>(localKey(CLASSROOM_STORAGE_KEYS.attendance), []);
+  const studentProgress = readClassroomData<StudentProgress[]>(localKey(CLASSROOM_STORAGE_KEYS.progress), []);
+  const activityRecords = readClassroomData<StudentActivity[]>(localKey(CLASSROOM_STORAGE_KEYS.activity), []);
 
   const newestAttendanceDay = attendanceRecords.reduce(
     (latest, record) => (record.date > latest ? record.date : latest),
@@ -224,9 +210,7 @@ export function ClassroomToolsPage() {
       {storageError && <p role="alert" className="rounded-xl bg-red-50 px-4 py-3 text-sm text-red-800">{storageError}</p>}
 
       <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">
-        {isSheetsSyncConfigured()
-          ? 'Aktivitas dan hasil kuis disinkronkan ke Google Sheets. Dashboard dapat disegarkan untuk mengambil data siswa lintas perangkat.'
-          : 'Pelacakan lokal aktif. Untuk mengumpulkan data lintas perangkat ke spreadsheet, deploy Apps Script lalu isi URL Web App pada classroom-sync.ts.'}
+        Data kelas lintas perangkat hanya ditampilkan dari Firestore dengan aturan akses. Penyimpanan lokal untuk aktivitas kelas terpisah per akun; sinkronisasi Google Sheets dinonaktifkan.
       </div>
 
       {profile?.role === 'teacher' ? (
@@ -236,13 +220,13 @@ export function ClassroomToolsPage() {
           onRefresh={refresh}
           onSave={save}
           attempts={quizAttempts}
+          institutionId={profile.role === 'teacher' ? profile.institutionId : ''}
           pollSession={pollSession}
           attendanceRecords={groupedAttendance}
           newestAttendanceDay={newestAttendanceDay}
           latestDayCount={latestDayCount}
           progress={orderedProgress}
           activities={activityRecords}
-          refreshVersion={refreshKey}
         />
       ) : (
         <>
@@ -262,10 +246,10 @@ export function ClassroomToolsPage() {
             ))}
           </div>
 
-          {activeTab === 'quiz' && <ReactionQuiz key={profile.name} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
-          {activeTab === 'poll' && <StudentPoll key={pollSession.id} onSave={save} pollSession={pollSession} />}
-          {activeTab === 'attendance' && <StudentAttendance key={profile.name} initialName={profile.name} onSave={save} records={attendanceRecords} />}
-          {activeTab === 'progress' && <StudentTaskProgress key={`${profile.name}|${profile.className}`} initialName={profile.name} className={profile.className} onSave={save} progress={studentProgress} />}
+          {activeTab === 'quiz' && <ReactionQuiz key={profile.uid} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
+          {activeTab === 'poll' && <StudentPoll key={`${profile.uid}:${pollSession.id}`} uid={profile.uid} onSave={save} pollSession={pollSession} />}
+          {activeTab === 'attendance' && <StudentAttendance key={profile.uid} initialName={profile.name} onSave={save} records={attendanceRecords} />}
+          {activeTab === 'progress' && <StudentTaskProgress key={profile.uid} initialName={profile.name} className={profile.className} onSave={save} progress={studentProgress} />}
         </>
       )}
     </div>
@@ -306,15 +290,7 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
         console.error('Gagal mengirim hasil kegiatan kelas ke Firestore:', error);
         setSyncMessage('Nilai tersimpan di browser, tetapi pengiriman hasil ke Firebase gagal.');
       });
-      void sendQuizToSheets(attempt, className).then((result) => {
-        setSyncMessage(
-          result === 'sent'
-            ? 'Permintaan sinkronisasi Google Sheets terkirim. Pastikan hasil muncul di spreadsheet.'
-            : result === 'failed'
-              ? 'Nilai tersimpan di browser, tetapi pengiriman ke Google Sheets gagal.'
-              : 'Nilai tersimpan di browser. Sinkronisasi Google Sheets belum diaktifkan.',
-        );
-      });
+      setSyncMessage('Nilai juga tersimpan pada browser ini. Sinkronisasi Google Sheets dinonaktifkan.');
     }
   };
 
@@ -379,8 +355,8 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
   );
 }
 
-function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unknown) => boolean; pollSession: PollSession }) {
-  const submittedKey = `atomika-poll-submitted-${pollSession.id}`;
+function StudentPoll({ uid, onSave, pollSession }: { uid: string; onSave: (key: string, value: unknown) => boolean; pollSession: PollSession }) {
+  const submittedKey = `atomika-poll-submitted-${uid}:${pollSession.id}`;
   const [submittedSessionId, setSubmittedSessionId] = useState(() => {
     return getStorageItem(submittedKey).value === 'true' ? pollSession.id : '';
   });
@@ -392,7 +368,6 @@ function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unk
     if (choice === null) return;
     const response = { id: crypto.randomUUID(), optionIndex: choice, submittedAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.poll, { ...pollSession, responses: [...pollSession.responses, response] })) {
-      void savePollResponse(pollSession.id, response);
       const persisted = setStorageItem(submittedKey, 'true');
       setSubmittedSessionId(pollSession.id);
       setSubmitError(
@@ -442,7 +417,6 @@ function StudentAttendance({ initialName, onSave, records }: { initialName: stri
     }
     const record = { name: name.trim().replace(/\s+/g, ' '), date: today, checkedInAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.attendance, [...records, record])) {
-      void saveAttendance(record);
       setConfirmation({ name: record.name, time: record.checkedInAt, duplicate: false });
     }
   };
@@ -499,16 +473,7 @@ function StudentTaskProgress({ initialName, className, onSave, progress }: { ini
     if (onSave(CLASSROOM_STORAGE_KEYS.progress, nextRoster)) {
       setCompletedStages(nextStages);
       setSaveMessage('Progres tersimpan.');
-      void saveStudentProgress(updated);
-      void sendProgressToSheets(updated, className).then((result) => {
-        setSyncMessage(
-          result === 'sent'
-            ? 'Permintaan sinkronisasi Google Sheets terkirim.'
-            : result === 'failed'
-              ? 'Sinkronisasi gagal; progres tetap tersimpan di browser.'
-              : 'Spreadsheet belum tersambung; progres tersimpan di browser.',
-        );
-      });
+      setSyncMessage('Progres tersimpan di browser ini. Sinkronisasi lintas perangkat belum tersedia.');
     } else {
       setSaveMessage('Progres belum berhasil disimpan.');
     }
@@ -560,7 +525,7 @@ function TeacherDashboard({
   latestDayCount,
   progress,
   activities,
-  refreshVersion,
+  institutionId,
 }: {
   activeTab: ActivityTab;
   onTabChange: (tab: ActivityTab) => void;
@@ -573,67 +538,39 @@ function TeacherDashboard({
   latestDayCount: number;
   progress: StudentProgress[];
   activities: StudentActivity[];
-  refreshVersion: number;
+  institutionId: string;
 }) {
   const [pollResetMessage, setPollResetMessage] = useState('');
-  const [sheetsData, setSheetsData] = useState<TeacherSheetsData | null>(null);
-  const [sheetsError, setSheetsError] = useState('');
-  const [sheetsLoading, setSheetsLoading] = useState(false);
+  const sheetsError = 'Sinkronisasi Google Sheets dinonaktifkan. Data lintas perangkat menggunakan Firestore dan hanya tersedia untuk akun yang ditetapkan pada institusi.';
+  const sheetsLoading = false;
   const answerCounts = POLL_OPTIONS.map((_, optionIndex) =>
     pollSession.responses.filter((response) => response.optionIndex === optionIndex).length,
   );
   const totalResponses = pollSession.responses.length;
 
-  const refreshSheets = useCallback(async () => {
-    await Promise.resolve();
-    if (!isSheetsSyncConfigured()) {
-      setSheetsData(null);
-      setSheetsError('Google Sheets belum tersambung. Deploy google-apps-script/Code.gs, lalu isi CLASSROOM_SHEETS_WEB_APP_URL di src/lib/classroom-sync.ts.');
-      return;
-    }
-    setSheetsLoading(true);
-    setSheetsError('');
-    try {
-      setSheetsData(await loadTeacherDataFromSheets());
-    } catch (error) {
-      console.error('Gagal memuat dashboard dari Google Sheets:', error);
-      setSheetsError(error instanceof Error ? error.message : 'Gagal memuat data Google Sheets.');
-    } finally {
-      setSheetsLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (activeTab !== 'activity' && activeTab !== 'quiz' && activeTab !== 'progress') return;
-    const initialRefresh = window.setTimeout(() => { void refreshSheets(); }, 0);
-    const intervalId = window.setInterval(() => { void refreshSheets(); }, 30000);
-    return () => {
-      window.clearTimeout(initialRefresh);
-      window.clearInterval(intervalId);
-    };
-  }, [activeTab, refreshVersion, refreshSheets]);
-
   const [firebaseActivities, setFirebaseActivities] = useState<StudentActivity[]>([]);
   const [firebaseQuizzes, setFirebaseQuizzes] = useState<TrackedQuizResult[]>([]);
 
   useEffect(() => {
-    const unsubActivities = subscribeStudentActivities((items) => setFirebaseActivities(items));
-    const unsubQuizzes = subscribeQuizAttempts((items) => setFirebaseQuizzes(items));
+    if (!institutionId) return;
+
+    const unsubActivities = subscribeStudentActivities(
+      (items) => setFirebaseActivities(items),
+      institutionId,
+    );
+    const unsubQuizzes = subscribeQuizAttempts(
+      (items) => setFirebaseQuizzes(items),
+      institutionId,
+    );
     return () => {
       unsubActivities();
       unsubQuizzes();
     };
-  }, []);
+  }, [institutionId]);
 
-  const latestActivities = mergeActivities(
-    mergeActivities(activities, sheetsData?.activities ?? []),
-    firebaseActivities
-  );
-  const allQuizResults = mergeQuizResults(
-    mergeQuizResults(attempts, sheetsData?.quizzes ?? []),
-    firebaseQuizzes
-  );
-  const allProgress = mergeStudentProgress(progress, sheetsData?.progress ?? []);
+  const latestActivities = mergeActivities(activities, firebaseActivities);
+  const allQuizResults = mergeQuizResults(attempts, firebaseQuizzes);
+  const allProgress = progress;
 
   const startNewPoll = () => {
     const newSession: PollSession = { id: crypto.randomUUID(), responses: [] };
