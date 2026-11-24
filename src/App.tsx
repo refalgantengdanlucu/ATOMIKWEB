@@ -11,6 +11,7 @@ import { QuizListPage } from './pages/QuizListPage';
 import { QuizSessionPage } from './pages/QuizSessionPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { ClassroomToolsPage } from './pages/ClassroomToolsPage';
+import { EssayExercisePage } from './pages/EssayExercisePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthPage } from './pages/AuthPage';
 import { PanelGuruRoute } from './panel-guru/PanelGuruRoute';
@@ -52,6 +53,7 @@ function ProtectedApp() {
       <Layout>
         <Routes>
           <Route path="/materi" element={<MateriPage />} />
+          <Route path="/materi/essay" element={<EssayExercisePage />} />
           <Route path="/materi/:topicId" element={<MateriDetailPage />} />
           <Route path="/laboratorium" element={<Navigate to="/laboratorium/partikel" replace />} />
           <Route path="/laboratorium/:mode" element={<LaboratoriumPage />} />

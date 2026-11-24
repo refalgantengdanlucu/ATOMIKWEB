@@ -152,13 +152,14 @@ service cloud.firestore {
       allow list: if false;
       allow create: if isSignedIn()
         && request.auth.uid == userId
-        && request.resource.data.keys().hasOnly(['name', 'className'])
+        && request.resource.data.keys().hasOnly(['name', 'className', 'institutionId'])
         && request.resource.data.keys().hasAll(['name', 'className'])
         && request.resource.data.name is string
         && request.resource.data.name.size() > 0
         && request.resource.data.name.size() <= 80
         && request.resource.data.className is string
-        && request.resource.data.className.size() <= 40;
+        && request.resource.data.className.size() <= 40
+        && (!('institutionId' in request.resource.data) || isValidInstitutionId(request.resource.data.institutionId));
       allow update: if isSignedIn()
         && request.auth.uid == userId
         && request.resource.data.keys().hasOnly(['name', 'className', 'institutionId'])
@@ -194,6 +195,14 @@ service cloud.firestore {
       allow create: if isSignedIn()
         && validQuizAttempt(request.resource.data, attemptId);
       allow update, delete: if false;
+    }
+
+    match /essay_submissions/{submissionId} {
+      allow read: if (isSignedIn() && resource.data.uid == request.auth.uid)
+        || isTeacherFor(resource.data.institutionId);
+      allow create, update: if (isSignedIn() && request.auth.uid == request.resource.data.uid)
+        || isTeacherFor(request.resource.data.institutionId);
+      allow delete: if false;
     }
   }
 }

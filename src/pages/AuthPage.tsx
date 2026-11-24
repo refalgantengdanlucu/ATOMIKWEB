@@ -26,8 +26,8 @@ import {
   verifyPasswordResetCode,
   type AuthError,
 } from 'firebase/auth';
-import { doc, setDoc } from 'firebase/firestore';
-import { useAccess } from '../lib/access-context';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { DEFAULT_INSTITUTION_ID, useAccess } from '../lib/access-context';
 import { loginAsTeacherWithPassword } from '../lib/teacher-auth';
 import { applySessionPersistence, auth, db, getRememberSession, isFirebaseConfigured, setRememberSession } from '../lib/firebase';
 import { SkeletonBlock } from '../components/Skeleton';
@@ -270,6 +270,7 @@ export function AuthPage() {
           await setDoc(doc(db, 'profiles', user.uid), {
             name: fullName,
             className: className.trim().replace(/\s+/g, ' '),
+            institutionId: DEFAULT_INSTITUTION_ID,
           });
           await sendEmailVerification(user, {
             url: `${window.location.origin}/login`,
@@ -332,7 +333,21 @@ export function AuthPage() {
     try {
       setRememberSession(remember);
       await applySessionPersistence();
-      await signInWithPopup(auth, new GoogleAuthProvider());
+      const cred = await signInWithPopup(auth, new GoogleAuthProvider());
+      if (db && cred.user) {
+        try {
+          const profileDoc = await getDoc(doc(db, 'profiles', cred.user.uid));
+          if (!profileDoc.exists()) {
+            await setDoc(doc(db, 'profiles', cred.user.uid), {
+              name: cred.user.displayName || 'Siswa ATOMIKA',
+              className: 'Belum diatur',
+              institutionId: DEFAULT_INSTITUTION_ID,
+            });
+          }
+        } catch {
+          // ignore error if profile sync cannot be written
+        }
+      }
       const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
       navigate(dest, { replace: true });
     } catch (caught) {

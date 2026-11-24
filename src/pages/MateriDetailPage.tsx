@@ -454,14 +454,23 @@ export function MateriDetailPage() {
                 <ArrowRight className="w-4 h-4" />
               </button>
             ) : allTopicSectionsRead ? (
-              <button
-                type="button"
-                onClick={() => navigate('/materi')}
-                className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#15803D] hover:bg-green-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors"
-              >
-                <CheckCircle2 className="w-4 h-4" />
-                <span>✓ Topik Selesai — Kembali ke Daftar</span>
-              </button>
+              <div className="flex flex-wrap items-center gap-2">
+                <Link
+                  to="/materi/essay"
+                  className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-[#FFF8F0] border border-[#F97316]/40 text-[#C2410C] hover:bg-orange-100 text-xs sm:text-sm font-semibold transition-colors"
+                >
+                  <BookOpen className="w-4 h-4" />
+                  <span>Latihan Soal Essay</span>
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => navigate('/materi')}
+                  className="inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#15803D] hover:bg-green-700 text-white text-xs sm:text-sm font-semibold shadow-xs transition-colors"
+                >
+                  <CheckCircle2 className="w-4 h-4" />
+                  <span>✓ Topik Selesai — Kembali ke Daftar</span>
+                </button>
+              </div>
             ) : (
               <div className="text-xs text-[#C2410C] font-semibold bg-[#FFEDD5] px-4 py-2 rounded-xl border border-[#F97316]/30">
                 Baca semua bagian sebelumnya terlebih dahulu

@@ -14,6 +14,8 @@ export interface AccessContextValue {
   exit: () => Promise<void>;
 }
 
+export const DEFAULT_INSTITUTION_ID = 'atomika-sma';
+
 export function isValidInstitutionId(value: unknown): value is string {
   return typeof value === 'string' && /^[A-Za-z0-9_-]{1,80}$/.test(value);
 }

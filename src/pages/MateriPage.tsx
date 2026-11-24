@@ -218,6 +218,27 @@ export function MateriPage() {
         </div>
       )}
 
+      {/* Banner Latihan Soal Essay */}
+      <div className="rounded-2xl border border-[#F97316]/30 bg-gradient-to-r from-[#FFF8F0] to-[#FFEDD5]/60 p-5 sm:p-6 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+        <div className="space-y-1">
+          <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-bold bg-[#FFEDD5] text-[#C2410C]">
+            <Sparkles className="w-3.5 h-3.5 text-[#F97316]" />
+            <span>Latihan Pemahaman Konseptual</span>
+          </div>
+          <h2 className="text-lg font-bold text-[#172033]">Latihan Soal Essay Struktur Atom</h2>
+          <p className="text-xs sm:text-sm text-[#475569] max-w-xl">
+            Tersedia 6 soal essay terbagi dalam 3 subtopik utama (Struktur & Partikel, Nomor Atom & Massa, serta Ion & Perubahan Elektron). Jawaban tersimpan di akun Anda dan dapat ditinjau oleh guru.
+          </p>
+        </div>
+        <Link
+          to="/materi/essay"
+          className="inline-flex shrink-0 items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white text-xs sm:text-sm font-bold shadow-xs transition-colors"
+        >
+          <span>Buka Latihan Essay</span>
+          <ArrowRight className="w-4 h-4" />
+        </Link>
+      </div>
+
       {/* Petunjuk Progres Global */}
       <div className="p-4 rounded-2xl bg-[#FFF8F0] border border-[#F97316]/20 text-xs text-[#475569] flex items-start gap-2.5">
         <span className="text-base shrink-0">📖</span>

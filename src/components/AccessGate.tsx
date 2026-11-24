@@ -1,7 +1,7 @@
 import { useCallback, useEffect, type ReactNode } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
-import { useAccess } from '../lib/access-context';
+import { useAccess, DEFAULT_INSTITUTION_ID } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, getStudentActivityKey, getUserClassroomStorageKey, readClassroomData, writeClassroomData } from '../lib/classroom';
 import type { StudentActivity } from '../lib/classroom';
 import { saveStudentActivity } from '../lib/firebase-db';
@@ -137,7 +137,7 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
     });
     const record: StudentActivity = {
       uid: profile.uid,
-      ...(profile.institutionId ? { institutionId: profile.institutionId } : {}),
+      institutionId: profile.institutionId || DEFAULT_INSTITUTION_ID,
       name: profile.name,
       className: profile.className,
       activity: currentActivity,
@@ -152,11 +152,9 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
       record,
     ];
     writeClassroomData(activityStorageKey, nextActivities);
-    if (profile.institutionId) {
-      void saveStudentActivity(record).catch((error: unknown) => {
-        console.error('Gagal mengirim aktivitas siswa ke Firestore:', error);
-      });
-    }
+    void saveStudentActivity(record).catch((error: unknown) => {
+      console.error('Gagal mengirim aktivitas siswa ke Firestore:', error);
+    });
   }, [blocked, location.pathname, location.search, markAsRead, profile, progress.visitedSectionIds, storageKey]);
 
   useEffect(() => {

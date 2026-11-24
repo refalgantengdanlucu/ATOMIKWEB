@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { onAuthStateChanged, signOut, type User } from 'firebase/auth';
-import { doc, getDoc } from 'firebase/firestore';
-import { AccessContext, isValidInstitutionId, type AccessProfile, type AccessContextValue } from '../lib/access-context';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
+import {
+  AccessContext,
+  DEFAULT_INSTITUTION_ID,
+  isValidInstitutionId,
+  type AccessProfile,
+  type AccessContextValue,
+} from '../lib/access-context';
 import { auth, db } from '../lib/firebase';
 
 function readSessionProfile(): AccessProfile | null {
@@ -46,14 +52,27 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
   if (isTeacher) {
     const institutionId = isValidInstitutionId(teacher?.institutionId)
       ? teacher.institutionId
-      : 'atomika-sma';
+      : DEFAULT_INSTITUTION_ID;
     return { role: 'teacher', uid: user.uid, name, institutionId };
   }
 
   const classNameValue = profile?.className ?? userData?.className;
   const institutionId = isValidInstitutionId(profile?.institutionId)
     ? profile.institutionId
-    : undefined;
+    : DEFAULT_INSTITUTION_ID;
+
+  if (db && !isValidInstitutionId(profile?.institutionId)) {
+    void setDoc(
+      doc(db, 'profiles', user.uid),
+      {
+        name,
+        className: typeof classNameValue === 'string' && classNameValue.trim() ? classNameValue.trim() : 'Belum diatur',
+        institutionId: DEFAULT_INSTITUTION_ID,
+      },
+      { merge: true },
+    ).catch(() => {});
+  }
+
   return {
     role: 'student',
     uid: user.uid,
@@ -61,7 +80,7 @@ async function profileFromUser(user: User | null): Promise<AccessProfile | null>
     className: typeof classNameValue === 'string' && classNameValue.trim()
       ? classNameValue.trim()
       : 'Belum diatur',
-    ...(institutionId ? { institutionId } : {}),
+    institutionId,
   };
 }
 

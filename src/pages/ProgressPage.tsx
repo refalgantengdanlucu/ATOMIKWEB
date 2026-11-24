@@ -221,6 +221,58 @@ export function ProgressPage() {
         </div>
       </section>
 
+      <section aria-labelledby="classroom-roadmap">
+        <div className="mb-4 flex items-center gap-2">
+          <Award className="h-5 w-5 text-[#F97316]" aria-hidden="true" />
+          <h2 id="classroom-roadmap" className="text-xl font-extrabold text-[#172033]">
+            4. Penguatan Konsep &amp; Latihan Essay
+          </h2>
+        </div>
+        <div className="grid gap-4 md:grid-cols-2">
+          <article className="flex flex-col justify-between rounded-2xl border border-[#F1E5D8] bg-white p-5 shadow-xs">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wide text-[#C2410C]">
+                Kegiatan Kelas
+              </span>
+              <h3 className="mt-1 font-bold leading-snug text-[#172033]">
+                Kuis Penguatan Struktur Atom
+              </h3>
+              <p className="mt-2 text-xs text-[#475569]">
+                10 soal pilihan ganda (mudah, sedang, sukar) mencakup partikel subatom, isotop, dan ion untuk menguji pemahaman kelas.
+              </p>
+            </div>
+            <Link
+              to="/kelas?aktivitas=quiz"
+              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F1E5D8] bg-[#FFF8F0] px-4 text-xs font-semibold text-[#C2410C] hover:bg-[#FFEDD5] transition-colors"
+            >
+              <span>Buka Kuis Penguatan</span>
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </article>
+
+          <article className="flex flex-col justify-between rounded-2xl border border-[#F1E5D8] bg-white p-5 shadow-xs">
+            <div>
+              <span className="text-xs font-bold uppercase tracking-wide text-[#C2410C]">
+                Latihan Menulis
+              </span>
+              <h3 className="mt-1 font-bold leading-snug text-[#172033]">
+                Latihan Soal Essay Struktur Atom
+              </h3>
+              <p className="mt-2 text-xs text-[#475569]">
+                6 soal essay terbagi dalam 3 subtopik dengan penjelasan konsep mendalam. Jawaban Anda tersimpan dan dinilai oleh guru.
+              </p>
+            </div>
+            <Link
+              to="/materi/essay"
+              className="mt-4 inline-flex min-h-10 items-center justify-center gap-2 rounded-xl border border-[#F1E5D8] bg-[#FFF8F0] px-4 text-xs font-semibold text-[#C2410C] hover:bg-[#FFEDD5] transition-colors"
+            >
+              <span>Kerjakan Soal Essay</span>
+              <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
+            </Link>
+          </article>
+        </div>
+      </section>
+
       <section className="flex flex-col items-start justify-between gap-4 rounded-2xl border border-[#F1E5D8] bg-white p-6 shadow-xs sm:flex-row sm:items-center">
         <div>
           <h2 className="text-sm font-bold text-[#172033]">Progres tersimpan di perangkat ini</h2>

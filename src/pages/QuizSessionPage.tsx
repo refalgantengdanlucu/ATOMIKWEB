@@ -6,7 +6,7 @@ import {
 } from 'lucide-react';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
-import { useAccess } from '../lib/access-context';
+import { useAccess, DEFAULT_INSTITUTION_ID } from '../lib/access-context';
 import { isTopicCompleted, saveProgressForKey, getProgressForKey, useProgress } from '../lib/progress';
 import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import { calculateQuizScore, createAttemptId, type QuizAttemptRecord } from '../lib/quiz-attempt';
@@ -395,11 +395,11 @@ function createInitialAttempt(topicId: TopicId, profile: ReturnType<typeof useAc
           uid: profile.uid,
           name: profile.name,
           className: profile.className,
-          ...(profile.institutionId ? { institutionId: profile.institutionId } : {}),
+          institutionId: profile.institutionId || DEFAULT_INSTITUTION_ID,
         }
       : profile?.role === 'teacher'
-        ? { uid: profile.uid, name: profile.name, className: '' }
-        : { uid: null, name: 'Siswa anonim', className: '' },
+        ? { uid: profile.uid, name: profile.name, className: '', institutionId: profile.institutionId || DEFAULT_INSTITUTION_ID }
+        : { uid: null, name: 'Siswa anonim', className: '', institutionId: DEFAULT_INSTITUTION_ID },
     answers: {},
     questionVersion: 'v1',
     score: 0,

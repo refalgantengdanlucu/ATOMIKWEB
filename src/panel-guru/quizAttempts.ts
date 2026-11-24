@@ -10,6 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db } from '../lib/firebase';
+import { DEFAULT_INSTITUTION_ID } from '../lib/access-context';
 import type { TopicId } from '../types';
 
 export type AttemptType = 'diagnostic' | 'practice' | 'unknown';
@@ -175,15 +176,13 @@ export async function saveTopicQuizAttempt({
 }): Promise<void> {
   const user = auth?.currentUser;
   if (!db || !user) throw new Error('Sesi Firebase diperlukan untuk mengirim hasil kuis.');
-  if (!studentIdentity.institutionId) {
-    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
-  }
+  const institutionId = studentIdentity.institutionId || DEFAULT_INSTITUTION_ID;
 
   const attemptRef = doc(db, 'quiz_attempts', attemptId);
   await setDoc(attemptRef, {
     id: attemptRef.id,
     uid: user.uid,
-    institutionId: studentIdentity.institutionId,
+    institutionId,
     alias: studentIdentity.name || `Siswa-${user.uid.slice(0, 6)}`,
     className: studentIdentity.className,
     quizTitle: activityName,

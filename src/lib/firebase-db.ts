@@ -10,7 +10,7 @@ import {
   where,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
-import { isValidInstitutionId } from './access-context';
+import { DEFAULT_INSTITUTION_ID, isValidInstitutionId } from './access-context';
 import type { StudentActivity, TrackedQuizResult } from './classroom';
 
 /**
@@ -22,11 +22,9 @@ export async function saveStudentActivity(activity: StudentActivity): Promise<vo
   if (!auth?.currentUser || auth.currentUser.uid !== activity.uid) {
     throw new Error('Sesi Firebase tidak cocok dengan pemilik aktivitas.');
   }
-  if (!isValidInstitutionId(activity.institutionId)) {
-    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
-  }
+  const instId = activity.institutionId || DEFAULT_INSTITUTION_ID;
   const activityRef = doc(db, 'student_activities', activity.uid);
-  await setDoc(activityRef, activity, { merge: true });
+  await setDoc(activityRef, { ...activity, institutionId: instId }, { merge: true });
 }
 
 /**
@@ -34,16 +32,17 @@ export async function saveStudentActivity(activity: StudentActivity): Promise<vo
  */
 export function subscribeStudentActivities(
   callback: (activities: StudentActivity[]) => void,
-  institutionId: string,
+  institutionId?: string,
 ): () => void {
-  if (!db || !isFirebaseConfigured || !isValidInstitutionId(institutionId)) {
+  const instId = institutionId || DEFAULT_INSTITUTION_ID;
+  if (!db || !isFirebaseConfigured || !isValidInstitutionId(instId)) {
     callback([]);
     return () => {};
   }
 
   const q = query(
     collection(db, 'student_activities'),
-    where('institutionId', '==', institutionId),
+    where('institutionId', '==', instId),
     limit(100),
   );
   return onSnapshot(
@@ -67,22 +66,23 @@ export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void>
   if (!user) throw new Error('Sesi Firebase diperlukan untuk menyimpan hasil kuis.');
   const profileSnapshot = await getDoc(doc(db, 'profiles', user.uid));
   const profile = profileSnapshot.data();
-  if (
-    !profileSnapshot.exists() ||
-    !isValidInstitutionId(profile?.institutionId) ||
-    typeof profile.name !== 'string' ||
-    typeof profile.className !== 'string'
-  ) {
-    throw new Error('Akun siswa belum ditetapkan ke institusi oleh administrator.');
-  }
+  const instId = isValidInstitutionId(profile?.institutionId)
+    ? profile.institutionId
+    : DEFAULT_INSTITUTION_ID;
+  const alias = typeof profile?.name === 'string' && profile.name.trim()
+    ? profile.name
+    : user.displayName || `Siswa-${user.uid.slice(0, 6)}`;
+  const className = typeof profile?.className === 'string'
+    ? profile.className
+    : attempt.className || 'Belum diatur';
 
   const attemptRef = doc(collection(db, 'quiz_attempts'));
   await setDoc(attemptRef, {
     id: attemptRef.id,
     uid: user.uid,
-    institutionId: profile.institutionId,
-    alias: profile.name,
-    className: profile.className,
+    institutionId: instId,
+    alias,
+    className,
     quizTitle: attempt.quizTitle,
     activityName: attempt.quizTitle,
     moduleId: 'classroom',
@@ -102,16 +102,17 @@ export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void>
  */
 export function subscribeQuizAttempts(
   callback: (results: TrackedQuizResult[]) => void,
-  institutionId: string,
+  institutionId?: string,
 ): () => void {
-  if (!db || !isFirebaseConfigured || !isValidInstitutionId(institutionId)) {
+  const instId = institutionId || DEFAULT_INSTITUTION_ID;
+  if (!db || !isFirebaseConfigured || !isValidInstitutionId(instId)) {
     callback([]);
     return () => {};
   }
 
   const q = query(
     collection(db, 'quiz_attempts'),
-    where('institutionId', '==', institutionId),
+    where('institutionId', '==', instId),
     limit(150),
   );
   return onSnapshot(

@@ -3,6 +3,7 @@ import { useSearchParams } from 'react-router-dom';
 import {
   Activity,
   BarChart3,
+  BookOpen,
   CalendarCheck,
   Check,
   CheckCircle2,
@@ -21,8 +22,6 @@ import {
   POLL_OPTIONS,
   POLL_PROMPT,
   PROGRESS_STAGES,
-  REACTION_QUESTIONS,
-  REACTION_TYPES,
   readClassroomData,
   getStudentActivityKey,
   getUserClassroomStorageKey,
@@ -33,22 +32,37 @@ import { useAccess } from '../lib/access-context';
 import { getStorageItem, setStorageItem } from '../lib/safe-storage';
 import { SkeletonBlock, SkeletonTable } from '../components/Skeleton';
 import {
-  saveQuizAttempt,
   subscribeQuizAttempts,
   subscribeStudentActivities,
 } from '../lib/firebase-db';
+import { AtomicStructureQuiz } from '../components/classroom/AtomicStructureQuiz';
+import { TeacherCurriculumQuizRecap } from '../components/classroom/TeacherCurriculumQuizRecap';
+import { TeacherEssayRecap } from '../components/classroom/TeacherEssayRecap';
 
-type ActivityTab = 'quiz' | 'poll' | 'attendance' | 'progress' | 'activity' | 'settings';
+type ActivityTab =
+  | 'quiz_curriculum'
+  | 'essay'
+  | 'quiz'
+  | 'activity'
+  | 'poll'
+  | 'attendance'
+  | 'progress'
+  | 'settings';
 
 const TABS: { id: ActivityTab; title: string; description: string; icon: typeof Activity }[] = [
-  { id: 'quiz', title: 'Kuis Reaksi', description: '10 soal klasifikasi reaksi', icon: ClipboardList },
+  { id: 'quiz', title: 'Kuis Struktur Atom', description: '10 soal penguatan konsep atom', icon: ClipboardList },
   { id: 'poll', title: 'Cek Pemahaman Live', description: 'Polling cepat kelas', icon: BarChart3 },
   { id: 'attendance', title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
   { id: 'progress', title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
 ];
 const TEACHER_TABS = [
-  ...TABS,
+  { id: 'quiz_curriculum' as const, title: 'Rekap Kuis 1, 2, 3', description: 'Hasil kuis kurikulum & rincian butir', icon: BookOpen },
+  { id: 'essay' as const, title: 'Latihan Soal Essay', description: 'Jawaban essay & penilaian guru', icon: ClipboardList },
+  { id: 'quiz' as const, title: 'Kuis Penguatan', description: 'Hasil kuis kegiatan kelas 10 soal', icon: BarChart3 },
   { id: 'activity' as const, title: 'Aktivitas Siswa', description: 'Posisi dan progres belajar', icon: Users },
+  { id: 'poll' as const, title: 'Cek Pemahaman Live', description: 'Polling cepat kelas', icon: Activity },
+  { id: 'attendance' as const, title: 'Presensi', description: 'Check-in kehadiran', icon: CalendarCheck },
+  { id: 'progress' as const, title: 'Progres Tugas', description: 'Checklist laporan praktikum', icon: CheckCircle2 },
   { id: 'settings' as const, title: 'Sandi Guru', description: 'Pengaturan sandi khusus guru', icon: KeyRound },
 ];
 
@@ -101,7 +115,7 @@ function mergeQuizResults(local: QuizAttempt[], remote: TrackedQuizResult[]): Tr
       ...result,
       submittedAt,
       className: result.className ?? '',
-      quizTitle: result.quizTitle ?? 'Klasifikasi Jenis Reaksi Kimia',
+      quizTitle: result.quizTitle ?? 'Kuis Penguatan Struktur Atom',
       maxScore: 'maxScore' in result && typeof result.maxScore === 'number' ? result.maxScore : 10,
       percent: 'percent' in result && typeof result.percent === 'number' ? result.percent : Math.round((result.score / 10) * 100),
     };
@@ -131,7 +145,7 @@ function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
   const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
   const link = document.createElement('a');
   link.href = url;
-  link.download = 'hasil-kuis-atomika.csv';
+  link.download = 'hasil-kuis-penguatan-struktur-atom.csv';
   document.body.appendChild(link);
   link.click();
   link.remove();
@@ -140,13 +154,17 @@ function downloadQuizSpreadsheet(results: TrackedQuizResult[]): void {
 
 export function ClassroomToolsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
+  const { profile } = useAccess();
   const requestedTab = searchParams.get('aktivitas');
+  const isTeacher = profile?.role === 'teacher';
+  const defaultTab: ActivityTab = isTeacher ? 'quiz_curriculum' : 'quiz';
   const [activeTab, setActiveTabState] = useState<ActivityTab>(
-    TEACHER_TABS.some((tab) => tab.id === requestedTab) ? requestedTab as ActivityTab : 'quiz',
+    TEACHER_TABS.some((tab) => tab.id === requestedTab)
+      ? (requestedTab as ActivityTab)
+      : defaultTab,
   );
   const [storageError, setStorageError] = useState('');
   const [, setRefreshKey] = useState(0);
-  const { profile } = useAccess();
 
   const refresh = useCallback(() => setRefreshKey((current) => current + 1), []);
   const setActiveTab = (tab: ActivityTab) => {
@@ -251,112 +269,21 @@ export function ClassroomToolsPage() {
             ))}
           </div>
 
-          {activeTab === 'quiz' && <ReactionQuiz key={profile.uid} initialName={profile.name} className={profile.className} onSave={save} attempts={quizAttempts} />}
+          {activeTab === 'quiz' && (
+            <AtomicStructureQuiz
+              key={profile.uid}
+              initialName={profile.name}
+              className={profile.className}
+              onSave={save}
+              attempts={quizAttempts}
+            />
+          )}
           {activeTab === 'poll' && <StudentPoll key={`${profile.uid}:${pollSession.id}`} uid={profile.uid} onSave={save} pollSession={pollSession} />}
           {activeTab === 'attendance' && <StudentAttendance key={profile.uid} initialName={profile.name} onSave={save} records={attendanceRecords} />}
           {activeTab === 'progress' && <StudentTaskProgress key={profile.uid} initialName={profile.name} className={profile.className} onSave={save} progress={studentProgress} />}
         </>
       )}
     </div>
-  );
-}
-
-function ReactionQuiz({ initialName, className, onSave, attempts }: { initialName: string; className: string; onSave: (key: string, value: unknown) => boolean; attempts: QuizAttempt[] }) {
-  const [name] = useState(initialName);
-  const [questionIndex, setQuestionIndex] = useState(-1);
-  const [selected, setSelected] = useState<string | null>(null);
-  const [answers, setAnswers] = useState<boolean[]>([]);
-  const [finished, setFinished] = useState(false);
-  const [savedScore, setSavedScore] = useState<number | null>(null);
-  const [syncMessage, setSyncMessage] = useState('');
-  const question = REACTION_QUESTIONS[questionIndex];
-
-  const finishQuiz = (nextAnswers: boolean[]) => {
-    const score = nextAnswers.filter(Boolean).length;
-    const attempt: QuizAttempt = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
-      name: name.trim().replace(/\s+/g, ' '),
-      className,
-      quizTitle: 'Klasifikasi Jenis Reaksi Kimia',
-      score,
-      submittedAt: new Date().toISOString(),
-    };
-    if (onSave(CLASSROOM_STORAGE_KEYS.quiz, [...attempts, attempt])) {
-      setSavedScore(score);
-      setFinished(true);
-      const tracked: TrackedQuizResult = {
-        ...attempt,
-        className,
-        quizTitle: 'Klasifikasi Jenis Reaksi Kimia',
-        maxScore: 10,
-        percent: Math.round((score / 10) * 100),
-      };
-      void saveQuizAttempt(tracked).catch((error: unknown) => {
-        console.error('Gagal mengirim hasil kegiatan kelas ke Firestore:', error);
-        setSyncMessage('Nilai tersimpan di browser, tetapi pengiriman hasil ke Firebase gagal.');
-      });
-      setSyncMessage('Nilai juga tersimpan pada browser ini. Sinkronisasi Google Sheets dinonaktifkan.');
-    }
-  };
-
-  if (finished) {
-    return (
-      <section className={`${panelClass} mx-auto max-w-2xl text-center`}>
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-green-100 text-green-700"><CheckCircle2 className="h-7 w-7" aria-hidden="true" /></div>
-        <p className="text-sm font-semibold text-[#64748B]">Kuis selesai, {name.trim()}!</p>
-        <h2 className="mt-1 text-4xl font-black text-[#172033]">{savedScore ?? 0}<span className="text-xl text-[#64748B]"> / 10</span></h2>
-        <p className="mt-2 text-sm text-[#475569]">Ini adalah hasil kuismu. Hanya kamu yang melihat skor di halaman ini.</p>
-        <p role="status" className="mt-3 text-xs text-[#64748B]">{syncMessage || 'Menyimpan hasil kuis...'}</p>
-        <button type="button" className={`${buttonClass} mt-6`} onClick={() => { setQuestionIndex(-1); setSelected(null); setAnswers([]); setFinished(false); setSavedScore(null); }}>Selesai</button>
-      </section>
-    );
-  }
-
-  if (questionIndex === -1) {
-    return (
-      <section className={`${panelClass} mx-auto max-w-2xl`}>
-        <p className="text-xs font-bold uppercase tracking-wider text-[#C2410C]">Kuis klasifikasi reaksi · 10 soal</p>
-        <h2 className="mt-2 text-2xl font-extrabold text-[#172033]">Kenali pola reaksinya</h2>
-        <p className="mt-2 text-sm leading-6 text-[#475569]">Pilih jenis reaksi yang paling sesuai. Setiap jawaban mendapat umpan balik langsung.</p>
-        <div className="mt-6 space-y-4">
-          <p className="rounded-xl bg-[#FFF8F0] px-4 py-3 text-sm text-[#475569]">Nama peserta: <strong className="text-[#172033]">{name}</strong></p>
-          <button type="button" className={buttonClass} onClick={() => setQuestionIndex(0)}>Mulai kuis</button>
-        </div>
-      </section>
-    );
-  }
-
-  const isCorrect = selected === question.correct;
-  return (
-    <section className={`${panelClass} mx-auto max-w-2xl`}>
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-bold uppercase tracking-wider text-[#C2410C]">Soal {questionIndex + 1} dari 10</p>
-        <span className="text-xs font-semibold text-[#64748B]">{answers.filter(Boolean).length} benar sejauh ini</span>
-      </div>
-      <div className="mt-3 h-2 overflow-hidden rounded-full bg-orange-100"><div className="h-full rounded-full bg-[#F97316] transition-all" style={{ width: `${((questionIndex + 1) / REACTION_QUESTIONS.length) * 100}%` }} /></div>
-      <h2 className="mt-7 text-lg font-bold text-[#172033]">Klasifikasikan persamaan reaksi berikut:</h2>
-      <p className="my-5 rounded-2xl bg-[#FFF8F0] px-4 py-6 text-center font-mono text-lg font-bold text-[#172033] sm:text-2xl">{question.equation}</p>
-      <div className="grid gap-2 sm:grid-cols-2">
-        {REACTION_TYPES.map((type) => (
-          <button type="button" key={type} disabled={selected !== null} onClick={() => { setSelected(type); setAnswers((current) => [...current, type === question.correct]); }} className={`min-h-12 rounded-xl border px-4 py-3 text-left text-sm font-semibold transition-colors ${selected === type ? (type === question.correct ? 'border-green-500 bg-green-50 text-green-800' : 'border-red-300 bg-red-50 text-red-800') : selected && type === question.correct ? 'border-green-500 bg-green-50 text-green-800' : 'border-[#F1E5D8] hover:border-orange-300 hover:bg-orange-50'}`}>
-            {type}
-          </button>
-        ))}
-      </div>
-      {selected && (
-        <div role="status" className={`mt-4 rounded-xl p-4 text-sm leading-6 ${isCorrect ? 'bg-green-50 text-green-900' : 'bg-amber-50 text-amber-950'}`}>
-          <strong>{isCorrect ? 'Tepat!' : `Belum tepat. Jawabannya: ${question.correct}.`}</strong> {question.explanation}
-          <button type="button" className={`${buttonClass} mt-4`} onClick={() => {
-            if (questionIndex === REACTION_QUESTIONS.length - 1) {
-              finishQuiz(answers);
-            } else {
-              setQuestionIndex((current) => current + 1);
-              setSelected(null);
-            }
-          }}>{questionIndex === REACTION_QUESTIONS.length - 1 ? 'Lihat skor saya' : 'Soal berikutnya'}</button>
-        </div>
-      )}
-    </section>
   );
 }
 
@@ -605,11 +532,19 @@ function TeacherDashboard({
 
       {sheetsError && <p role="status" className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs leading-5 text-amber-950">{sheetsError}</p>}
 
+      {activeTab === 'quiz_curriculum' && (
+        <TeacherCurriculumQuizRecap institutionId={institutionId} />
+      )}
+
+      {activeTab === 'essay' && (
+        <TeacherEssayRecap institutionId={institutionId} />
+      )}
+
       {activeTab === 'quiz' && (
         <div className={panelClass}>
           <div className="mb-5 flex items-center justify-between gap-3">
             <div>
-              <h3 className="text-lg font-bold text-[#172033]">Hasil kuis klasifikasi reaksi</h3>
+              <h3 className="text-lg font-bold text-[#172033]">Hasil Kuis Penguatan Struktur Atom</h3>
               <p className="flex items-center gap-2 text-sm text-[#64748B]">
                 {allQuizResults.length} pengerjaan tersimpan · terbaru dahulu
                 {sheetsLoading && (

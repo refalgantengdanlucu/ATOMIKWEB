@@ -152,10 +152,32 @@ export function TeacherDashboard({ institutionId }: { institutionId: string }) {
   return (
     <main className="mx-auto min-w-0 max-w-6xl space-y-8 px-4 py-8 sm:px-6">
       <header className="min-w-0">
-        <Link to="/" className="inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-[#C2410C] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C2410C]">
-          Kembali ke beranda
-        </Link>
-        <p className="text-sm font-bold uppercase tracking-wide text-[#C2410C]">Ruang pengajar</p>
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <Link to="/" className="inline-flex min-h-11 items-center rounded-lg text-sm font-semibold text-[#C2410C] underline-offset-4 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#C2410C]">
+            Kembali ke beranda
+          </Link>
+          <div className="flex flex-wrap items-center gap-2">
+            <Link
+              to="/kelas?aktivitas=quiz_curriculum"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-100/70 hover:bg-orange-100 text-xs font-bold text-[#C2410C] transition-colors"
+            >
+              <span>Rekap Kuis 1, 2, 3</span>
+            </Link>
+            <Link
+              to="/kelas?aktivitas=essay"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-orange-100/70 hover:bg-orange-100 text-xs font-bold text-[#C2410C] transition-colors"
+            >
+              <span>Latihan Essay</span>
+            </Link>
+            <Link
+              to="/kelas?aktivitas=activity"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-100 hover:bg-slate-200 text-xs font-semibold text-slate-700 transition-colors"
+            >
+              <span>Aktivitas Siswa</span>
+            </Link>
+          </div>
+        </div>
+        <p className="text-sm font-bold uppercase tracking-wide text-[#C2410C] mt-2">Ruang pengajar</p>
         <h1 className="mt-1 break-words text-3xl font-extrabold text-[#172033]">Panel Guru</h1>
         <p className="mt-2 max-w-3xl text-sm leading-6 text-[#475569]">
           Tinjau hasil yang sudah diterima Firestore. Pengiriman yang masih tertunda tidak ditampilkan dan tidak dihitung sebagai nilai nol.
