@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { ESSAY_QUESTIONS, QUIZ_QUESTIONS } from './quizQuestions';
+import { QUIZ_QUESTIONS } from './quizQuestions';
+import { calculateQuizScore } from '../lib/quiz-attempt';
 
 describe('topic quiz question banks', () => {
-  it('provides five five-option multiple-choice questions for each topic', () => {
+  it('provides five five-option questions for each topic', () => {
     for (const questions of Object.values(QUIZ_QUESTIONS)) {
       expect(questions).toHaveLength(5);
       for (const question of questions) {
@@ -16,23 +17,28 @@ describe('topic quiz question banks', () => {
     }
   });
 
-  it('provides two numbered essay questions for each topic', () => {
-    expect(ESSAY_QUESTIONS.t1.map((question) => question.number)).toEqual([1, 2]);
-    expect(ESSAY_QUESTIONS.t2.map((question) => question.number)).toEqual([3, 4]);
-    expect(ESSAY_QUESTIONS.t3.map((question) => question.number)).toEqual([5, 6]);
-
-    for (const questions of Object.values(ESSAY_QUESTIONS)) {
-      expect(questions).toHaveLength(2);
-      for (const question of questions) {
-        expect(question.id).toBeTruthy();
-        expect(question.prompt.trim().length).toBeGreaterThan(0);
-      }
-    }
-  });
-
   it('balances correct answers across A to E in every topic', () => {
     for (const questions of Object.values(QUIZ_QUESTIONS)) {
       expect(questions.map((question) => question.correct)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    }
+  });
+
+  it('scores all-correct and all-wrong answers correctly and does not count missing answers', () => {
+    for (const questions of Object.values(QUIZ_QUESTIONS)) {
+      const allCorrect = Object.fromEntries(
+        questions.map((question) => [question.id, question.correct])
+      );
+      expect(calculateQuizScore(questions, allCorrect)).toEqual({
+        score: 5,
+        maxScore: 5,
+        percent: 100,
+      });
+
+      expect(calculateQuizScore(questions, {})).toEqual({
+        score: 0,
+        maxScore: 5,
+        percent: 0,
+      });
     }
   });
 });

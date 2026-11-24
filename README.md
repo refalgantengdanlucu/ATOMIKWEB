@@ -44,6 +44,12 @@ npm run preview
 - `vite.config.ts` — Konfigurasi Vite & Tailwind CSS plugin
 - `tsconfig.json` — Konfigurasi TypeScript
 
+## Login dan Alur Belajar Siswa
+
+Login wajib untuk membuka beranda maupun fitur belajar. Rute login, pendaftaran, dan pemulihan kata sandi tersedia tanpa sesi; sesudah login siswa kembali ke halaman yang diminta atau ke beranda. Tanpa konfigurasi Firebase, halaman login akan menampilkan variabel yang perlu disiapkan dan proses autentikasi tetap dinonaktifkan.
+
+Siswa membuka materi secara berurutan; seluruh bagian Topik 1–3 harus dibaca sebelum Laboratorium terbuka. Laboratorium memiliki tiga mode (Partikel, Kalkulator Partikel, dan Simulator Ion); setiap mode ditandai selesai saat dibuka. Setelah ketiga mode dibuka, Kuis 1 tersedia. Kuis berikutnya terbuka setelah kuis sebelumnya dikirim. Halaman **Progres** selalu dapat dibuka dan menampilkan status materi, lab, urutan kuis, serta nilai terakhir dan terbaik. Progres tersimpan lokal di browser/perangkat siswa.
+
 ## Kegiatan Kelas
 
 Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Tahapan progres, pertanyaan polling, bank soal, daftar nama guru, dan PIN dapat diedit pada `src/lib/classroom.ts`.
@@ -62,18 +68,22 @@ URL spreadsheet saja belum mengaktifkan sinkronisasi; koneksi baru aktif setelah
 
 ## Autentikasi
 
-Semua halaman utama memerlukan sesi Supabase Auth. Buat proyek Supabase, salin `.env.example` menjadi `.env.local`, lalu isi URL proyek dan public anon/publishable key. Jangan pernah menaruh `service_role` key atau rahasia OAuth di frontend.
+Login diwajibkan sebelum siswa dapat membuka beranda maupun halaman belajar. Jika pengguna belum login, tautan yang diminta disimpan dan dibuka setelah login berhasil. Halaman login, pendaftaran, dan pemulihan kata sandi tetap dapat diakses tanpa sesi.
 
-Di Supabase:
+Autentikasi belum dapat digunakan sampai aplikasi Firebase Web dikonfigurasi. Buat aplikasi Web di Firebase, salin `.env.example` sebagai `.env.local` (PowerShell: `Copy-Item .env.example .env.local`), lalu ganti nilai contoh dengan konfigurasi Web Firebase dari **Project settings → Your apps**. Isi sekurangnya `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, dan `VITE_FIREBASE_APP_ID`. Mulai ulang server Vite setelah mengubah environment. Untuk deployment, tambahkan variabel yang sama pada pengaturan environment hosting dan build ulang. Nilai konfigurasi Web Firebase berada di sisi klien; jangan menaruh kredensial Admin SDK atau service account di frontend.
 
-1. Aktifkan autentikasi email/password dan verifikasi email. Atur kebijakan password minimal 8 karakter dengan huruf besar, huruf kecil, dan angka.
-2. Pada **Authentication → URL Configuration**, isi Site URL dan tambahkan redirect untuk `/login` serta `/reset-password` pada URL lokal dan domain deployment.
-3. Untuk Google, aktifkan provider Google dan masukkan OAuth client ID/secret pada pengaturan provider Supabase. Daftarkan callback Supabase yang ditampilkan di dashboard pada Google Cloud Console.
-4. Akun baru menjadi siswa secara default. Akun guru harus ditetapkan melalui `app_metadata.role = "teacher"` memakai alat admin tepercaya di Supabase; jangan memberi role guru dari form browser atau `user_metadata`.
+Di Firebase Console:
 
-Sesi dan token dikelola Supabase Auth, bukan kata sandi yang disimpan aplikasi. Opsi **Ingat saya di perangkat ini** mengatur apakah sesi browser bertahan setelah tab ditutup. Tombol lupa kata sandi mengirim tautan pemulihan email; konfigurasi SMTP dan redirect harus aktif agar email produksi dapat terkirim. Tanpa `VITE_SUPABASE_URL` dan `VITE_SUPABASE_ANON_KEY`, halaman menampilkan peringatan konfigurasi dan autentikasi tidak dapat digunakan.
+1. Aktifkan **Authentication → Sign-in method → Email/Password** dan **Google**. Untuk Google, isi alamat email dukungan proyek.
+2. Pada **Authentication → Settings → Authorized domains**, tambahkan domain lokal dan domain deployment.
+3. Aktifkan Cloud Firestore, lalu salin aturan dari `firestore.rules` ke **Firestore → Rules** dan publish. Profil siswa disimpan di `profiles/{uid}` dan hanya dapat dibaca/ditulis oleh pemilik akun.
+4. Akun baru menjadi siswa secara default. Akun guru harus ditetapkan melalui custom claim `role: "teacher"` memakai Firebase Admin SDK pada lingkungan tepercaya. Jangan menetapkan role dari browser atau dari dokumen profil Firestore.
 
-Pembatasan rute guru/siswa di website memakai role dari sesi Supabase. Integrasi Google Sheets lama tetap memakai PIN bersama pada Apps Script dan berjalan di luar Supabase; PIN tersebut bukan kontrol akses yang aman untuk data sensitif. Lindungi spreadsheet/deployment secara terpisah sebelum menggunakannya untuk data privat.
+Sesi dan token dikelola Firebase Authentication, bukan kata sandi yang disimpan aplikasi. Opsi **Ingat saya di perangkat ini** mengatur apakah sesi browser bertahan setelah tab ditutup. Lupa kata sandi dan verifikasi email memakai tautan Firebase; pastikan template email dan domain pengalihan dikonfigurasi untuk domain deployment. Tanpa `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, dan `VITE_FIREBASE_APP_ID`, autentikasi tidak dapat digunakan.
+
+Pembatasan rute guru/siswa di website memakai custom claim pada token Firebase. Integrasi Google Sheets lama tetap memakai PIN bersama pada Apps Script dan berjalan terpisah dari Firebase; PIN tersebut bukan kontrol akses yang aman untuk data sensitif. Lindungi spreadsheet/deployment secara terpisah sebelum menggunakannya untuk data privat.
+
+Akun yang sebelumnya hanya ada di Supabase tidak otomatis dipindahkan ke Firebase; migrasi akun lama perlu ditangani terpisah.
 
 ## Laboratorium Virtual
 

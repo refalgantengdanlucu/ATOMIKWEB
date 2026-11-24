@@ -1,8 +1,9 @@
+import { useEffect } from 'react';
 import { useParams, Link, Navigate, useLocation } from 'react-router-dom';
 import { Atom, Calculator, Zap, Sparkles, Lock, ArrowRight } from 'lucide-react';
 import { IonSimulator, NuclideCalculator, ParticleExplorer } from '../components/lab/LabSimulators';
-import { useProgress } from '../lib/progress';
 import { useAccess } from '../lib/access-context';
+import { LAB_MODES, useProgress } from '../lib/progress';
 
 type LabMode = 'partikel' | 'kalkulator' | 'ion';
 
@@ -36,12 +37,18 @@ const LAB_TABS: { id: LabMode; label: string; desc: string; icon: typeof Atom; r
 export function LaboratoriumPage() {
   const { mode } = useParams<{ mode: string }>();
   const location = useLocation();
-  const { isLabModeUnlocked } = useProgress();
   const { profile } = useAccess();
+  const { isLabModeUnlocked, markLabModeComplete } = useProgress();
   const isTeacher = profile?.role === 'teacher';
 
   // Tentukan path basis rute (/laboratorium atau /lab)
   const basePath = location.pathname.startsWith('/lab') ? '/lab' : '/laboratorium';
+
+  useEffect(() => {
+    if (profile?.role !== 'student') return;
+    const activeLabMode = LAB_MODES.find((labMode) => labMode.id === mode);
+    if (activeLabMode) markLabModeComplete(activeLabMode.id);
+  }, [markLabModeComplete, mode, profile?.role]);
 
   // Validasi mode rute
   if (!mode || !['partikel', 'kalkulator', 'ion'].includes(mode)) {

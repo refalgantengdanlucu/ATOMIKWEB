@@ -2,15 +2,13 @@ import {
   collection,
   doc,
   setDoc,
-  getDoc,
-  getDocs,
   onSnapshot,
   query,
   orderBy,
-  where,
   limit,
+  serverTimestamp,
 } from 'firebase/firestore';
-import { db, isFirebaseConfigured } from './firebase';
+import { auth, db, isFirebaseConfigured } from './firebase';
 import type {
   AttendanceRecord,
   PollResponse,
@@ -19,142 +17,14 @@ import type {
 } from './classroom';
 import { normalizeStudentName } from './classroom';
 import type { TrackedQuizResult } from './classroom-sync';
-import type { AccessProfile } from './access-context';
-
-export interface FirebaseUserProfile {
-  uid: string;
-  email: string;
-  name: string;
-  className: string;
-  role: 'student' | 'teacher';
-  status?: 'active' | 'inactive';
-  updatedAt: string;
-}
-
-/**
- * Daftar email guru default yang diotorisasi.
- * Admin juga dapat menambahkan email guru baru ke koleksi 'authorized_teachers' di Firestore.
- */
-const DEFAULT_AUTHORIZED_TEACHER_EMAILS = [
-  'guru@atomika.id',
-  'guru.atomika@atomika.id',
-  'guru.kimia@sekolah.sch.id',
-  'refaldi.widiansyah.2403316@students.um.ac.id',
-];
-
-/**
- * Memverifikasi apakah suatu email telah diotorisasi sebagai guru.
- * Mengecek konfigurasi environment, daftar guru default, dan koleksi Firestore 'authorized_teachers'.
- */
-export async function isAuthorizedTeacherEmail(email: string): Promise<boolean> {
-  const normalized = email.trim().toLowerCase();
-  if (!normalized) return false;
-
-  // 1. Cek dari environment variable jika diset
-  const envList = (import.meta.env.VITE_AUTHORIZED_TEACHER_EMAILS || '')
-    .split(',')
-    .map((e: string) => e.trim().toLowerCase())
-    .filter(Boolean);
-  if (envList.includes(normalized)) return true;
-
-  // 2. Cek daftar email guru default
-  if (DEFAULT_AUTHORIZED_TEACHER_EMAILS.map((e) => e.toLowerCase()).includes(normalized)) {
-    return true;
-  }
-
-  // 3. Cek koleksi 'authorized_teachers' di Firestore
-  if (db && isFirebaseConfigured) {
-    try {
-      const teacherRef = doc(db, 'authorized_teachers', normalized);
-      const teacherSnap = await getDoc(teacherRef);
-      if (teacherSnap.exists()) return true;
-
-      // Cek apakah ada record di users dengan role teacher yang sudah terverifikasi
-      const userRef = query(collection(db, 'users'), where('email', '==', normalized), where('role', '==', 'teacher'), limit(1));
-      const userSnap = await getDocs(userRef);
-      if (!userSnap.empty) return true;
-    } catch (err) {
-      console.warn('Gagal memverifikasi email guru dari Firestore:', err);
-    }
-  }
-
-  return false;
-}
-
-/**
- * Menyimpan profil pengguna di koleksi 'users'.
- */
-export async function saveUserProfile(profile: FirebaseUserProfile): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  const userRef = doc(db, 'users', profile.uid);
-  await setDoc(userRef, profile, { merge: true });
-}
-
-/**
- * Mengambil profil pengguna dari koleksi 'users' berdasarkan UID.
- */
-export async function getUserProfile(uid: string): Promise<FirebaseUserProfile | null> {
-  if (!db || !isFirebaseConfigured) return null;
-  const userRef = doc(db, 'users', uid);
-  const snap = await getDoc(userRef);
-  if (!snap.exists()) return null;
-  return snap.data() as FirebaseUserProfile;
-}
-
-/**
- * Mengambil profil pengguna dari koleksi 'users' berdasarkan Email.
- */
-export async function getUserProfileByEmail(email: string): Promise<FirebaseUserProfile | null> {
-  if (!db || !isFirebaseConfigured) return null;
-  const normalized = email.trim().toLowerCase();
-  try {
-    const q = query(collection(db, 'users'), where('email', '==', normalized), limit(1));
-    const snap = await getDocs(q);
-    if (!snap.empty) {
-      return snap.docs[0].data() as FirebaseUserProfile;
-    }
-    // Jika tidak ditemukan dengan huruf kecil, coba dengan email asli
-    const qOrig = query(collection(db, 'users'), where('email', '==', email.trim()), limit(1));
-    const snapOrig = await getDocs(qOrig);
-    if (!snapOrig.empty) {
-      return snapOrig.docs[0].data() as FirebaseUserProfile;
-    }
-  } catch (err) {
-    console.warn('Gagal mencari profil user berdasarkan email:', err);
-  }
-  return null;
-}
-
-/**
- * Menentukan rute dashboard utama berdasarkan role pengguna.
- * - Guru -> '/kelas' (Dashboard Guru)
- * - Murid -> '/materi' (Dashboard Murid)
- */
-export function getDashboardRouteForRole(role: 'student' | 'teacher'): string {
-  return role === 'teacher' ? '/kelas' : '/materi';
-}
-
-/**
- * Mengubah FirebaseUserProfile menjadi AccessProfile.
- */
-export function toAccessProfile(user: FirebaseUserProfile): AccessProfile {
-  if (user.role === 'teacher') {
-    return { role: 'teacher', name: user.name };
-  }
-  return {
-    role: 'student',
-    name: user.name,
-    className: user.className || 'Belum diatur',
-  };
-}
 
 /**
  * Menyimpan aktivitas siswa ke koleksi 'student_activities'.
  */
 export async function saveStudentActivity(activity: StudentActivity): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
-  const docId = `${normalizeStudentName(activity.name)}_${normalizeStudentName(activity.className)}`;
-  const activityRef = doc(db, 'student_activities', docId);
+  if (!activity.uid) throw new Error('UID siswa diperlukan untuk menyimpan aktivitas.');
+  const activityRef = doc(db, 'student_activities', activity.uid);
   await setDoc(activityRef, activity, { merge: true });
 }
 
@@ -187,31 +57,28 @@ export function subscribeStudentActivities(
  * Menyimpan hasil pengerjaan kuis ke koleksi 'quiz_attempts'.
  */
 export async function saveQuizAttempt(attempt: TrackedQuizResult): Promise<void> {
-  if (!db || !isFirebaseConfigured) return;
-  try {
-    const attemptRef = doc(db, 'quiz_attempts', attempt.id);
-    await setDoc(attemptRef, attempt, { merge: true });
-  } catch (error) {
-    console.warn('Gagal menyimpan hasil kuis ke Firebase:', error);
-  }
-}
+  if (!db || !isFirebaseConfigured) throw new Error('Firestore belum dikonfigurasi untuk menyimpan hasil kuis.');
+  const user = auth?.currentUser;
+  if (!user) throw new Error('Sesi Firebase diperlukan untuk menyimpan hasil kuis.');
 
-/**
- * Mengambil seluruh data hasil kuis sekali panggil (direct fetch).
- */
-export async function getQuizAttempts(): Promise<TrackedQuizResult[]> {
-  if (!db || !isFirebaseConfigured) return [];
-  try {
-    const q = query(collection(db, 'quiz_attempts'), limit(250));
-    const snapshot = await getDocs(q);
-    const items: TrackedQuizResult[] = [];
-    snapshot.forEach((d) => items.push(d.data() as TrackedQuizResult));
-    items.sort((a, b) => Date.parse(b.submittedAt || '') - Date.parse(a.submittedAt || ''));
-    return items;
-  } catch (error) {
-    console.warn('Gagal memuat hasil kuis langsung dari Firebase:', error);
-    return [];
-  }
+  const attemptRef = doc(collection(db, 'quiz_attempts'));
+  await setDoc(attemptRef, {
+    id: attemptRef.id,
+    uid: user.uid,
+    alias: `Siswa-${user.uid.slice(0, 6)}`,
+    className: attempt.className,
+    quizTitle: attempt.quizTitle,
+    activityName: attempt.quizTitle,
+    moduleId: 'classroom',
+    attemptType: 'practice',
+    questionVersion: 'unversioned',
+    answers: {},
+    score: attempt.score,
+    maxScore: attempt.maxScore,
+    percent: attempt.percent,
+    submittedAt: attempt.submittedAt,
+    serverReceivedAt: serverTimestamp(),
+  });
 }
 
 /**
@@ -225,17 +92,16 @@ export function subscribeQuizAttempts(
     return () => {};
   }
 
-  const q = query(collection(db, 'quiz_attempts'), limit(250));
+  const q = query(collection(db, 'quiz_attempts'), orderBy('submittedAt', 'desc'), limit(150));
   return onSnapshot(
     q,
     (snapshot) => {
       const items: TrackedQuizResult[] = [];
       snapshot.forEach((d) => items.push(d.data() as TrackedQuizResult));
-      items.sort((a, b) => Date.parse(b.submittedAt || '') - Date.parse(a.submittedAt || ''));
       callback(items);
     },
     (error) => {
-      console.warn('Gagal mengambil data kuis realtime dari Firebase:', error);
+      console.error('Gagal mengambil data kuis dari Firebase:', error);
     }
   );
 }
@@ -282,74 +148,12 @@ export function subscribeAttendance(
 }
 
 /**
- * Berlangganan seluruh data presensi untuk tampilan rekap guru.
- */
-export function subscribeAllAttendance(
-  callback: (records: AttendanceRecord[]) => void
-): () => void {
-  if (!db || !isFirebaseConfigured) {
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(collection(db, 'attendance'), orderBy('checkedInAt', 'desc'), limit(300));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: AttendanceRecord[] = [];
-      snapshot.forEach((d) => items.push(d.data() as AttendanceRecord));
-      callback(items);
-    },
-    (error) => {
-      console.error('Gagal mengambil seluruh data presensi dari Firebase:', error);
-    }
-  );
-}
-
-/**
  * Menyimpan respon polling siswa ke koleksi 'classroom_polls'.
  */
 export async function savePollResponse(sessionId: string, response: PollResponse): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
   const pollRef = doc(db, 'classroom_polls', `${sessionId}_${response.id}`);
   await setDoc(pollRef, { sessionId, ...response }, { merge: true });
-}
-
-/**
- * Berlangganan data polling kelas secara realtime.
- */
-export function subscribePollResponses(
-  sessionId: string,
-  callback: (responses: PollResponse[]) => void
-): () => void {
-  if (!db || !isFirebaseConfigured) {
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(
-    collection(db, 'classroom_polls'),
-    where('sessionId', '==', sessionId),
-    limit(300)
-  );
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: PollResponse[] = [];
-      snapshot.forEach((d) => {
-        const data = d.data();
-        items.push({
-          id: data.id,
-          optionIndex: data.optionIndex,
-          submittedAt: data.submittedAt,
-        });
-      });
-      callback(items);
-    },
-    (error) => {
-      console.error('Gagal mengambil respon polling dari Firebase:', error);
-    }
-  );
 }
 
 /**
@@ -360,29 +164,4 @@ export async function saveStudentProgress(progress: StudentProgress): Promise<vo
   const docId = normalizeStudentName(progress.name);
   const progressRef = doc(db, 'student_progress', docId);
   await setDoc(progressRef, progress, { merge: true });
-}
-
-/**
- * Berlangganan data progres tugas siswa untuk tampilan rekap guru.
- */
-export function subscribeStudentProgress(
-  callback: (records: StudentProgress[]) => void
-): () => void {
-  if (!db || !isFirebaseConfigured) {
-    callback([]);
-    return () => {};
-  }
-
-  const q = query(collection(db, 'student_progress'), orderBy('updatedAt', 'desc'), limit(200));
-  return onSnapshot(
-    q,
-    (snapshot) => {
-      const items: StudentProgress[] = [];
-      snapshot.forEach((d) => items.push(d.data() as StudentProgress));
-      callback(items);
-    },
-    (error) => {
-      console.error('Gagal mengambil data progres siswa dari Firebase:', error);
-    }
-  );
 }

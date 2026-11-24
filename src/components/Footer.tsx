@@ -1,6 +1,8 @@
 import { Link } from 'react-router-dom';
 import { Sparkles, Atom } from 'lucide-react';
 
+const COPYRIGHT_YEAR = new Date().getFullYear();
+
 export function Footer() {
   return (
     <footer className="border-t border-[#F1E5D8] bg-white py-10 px-4 sm:px-6 mt-12 mb-16 md:mb-0">
@@ -58,6 +60,11 @@ export function Footer() {
                   </Link>
                 </li>
                 <li>
+                  <Link to="/progres" className="hover:text-[#C2410C] transition-colors">
+                    Progres Belajar
+                  </Link>
+                </li>
+                <li>
                   <Link to="/kelas" className="hover:text-[#C2410C] transition-colors">
                     Kegiatan Kelas
                   </Link>
@@ -86,7 +93,7 @@ export function Footer() {
 
         {/* Bottom Bar */}
         <div className="pt-6 border-t border-[#F1E5D8] flex flex-col sm:flex-row items-center justify-between gap-3 text-xs text-[#64748B]">
-          <p>© {new Date().getFullYear()} ATOMIKAWEB. Media Pembelajaran Kimia SMA/MA.</p>
+          <p>© {COPYRIGHT_YEAR} ATOMIKAWEB. Media Pembelajaran Kimia SMA/MA.</p>
           <div className="flex items-center gap-4 text-[11px]">
             <span>Bahasa Indonesia</span>
             <span>·</span>

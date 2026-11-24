@@ -14,9 +14,11 @@ export function MateriPage() {
   const { profile } = useAccess();
   const visited = progress.visitedSectionIds;
   const canOpenTopic = (topicId: TopicId) =>
-    profile?.role === 'teacher' || isTopicUnlocked(topicId);
+    profile?.role === 'teacher' ||
+    isTopicUnlocked(topicId);
   const canOpenSection = (topicId: TopicId, sectionId: string) =>
-    profile?.role === 'teacher' || isSectionUnlocked(topicId, sectionId);
+    profile?.role === 'teacher' ||
+    isSectionUnlocked(topicId, sectionId);
 
   // Algoritma pencarian berbobot sisi klien (PRD Bagian 7.1)
   const searchResults = useMemo(() => {
@@ -145,6 +147,7 @@ export function MateriPage() {
                     {sectionUnlocked ? (
                       <Link
                         to={`/materi/${sec.topicId}?s=${sec.id}`}
+                        data-card-hover
                         className="p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] shadow-xs transition-all flex flex-col justify-between group"
                       >
                         <div>

@@ -45,6 +45,7 @@ export type Nuclide = {
 export type LocalProgress = {
   version: 1;
   visitedSectionIds: string[];
+  activityLog: ProgressActivity[];
   labDone: Record<TopicId, boolean>;
   quizResults: Partial<
     Record<
@@ -59,6 +60,12 @@ export type LocalProgress = {
   >;
   lastOpenedSectionId?: string;
   updatedAt: string; // ISO 8601
+};
+
+export type ProgressActivity = {
+  activity: string;
+  path: string;
+  occurredAt: string;
 };
 
 export type TopicStatus = 'not_started' | 'in_progress' | 'completed';

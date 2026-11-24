@@ -194,7 +194,11 @@
   font-size: 14px;
   font-weight: 750;
   text-decoration: none;
-  transition: transform 150ms ease, background 150ms ease, box-shadow 150ms ease;
+  transition:
+    transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1),
+    background 180ms ease,
+    box-shadow 220ms ease,
+    border-color 180ms ease;
 }
 
 .auth-google-button {
@@ -207,7 +211,7 @@
 .auth-google-button:hover:not(:disabled) {
   border-color: #d7c1ad;
   background: #fffaf5;
-  transform: translateY(-1px);
+  transform: scale(1.02);
 }
 
 .auth-primary-button,
@@ -222,7 +226,14 @@
 .auth-secondary-button:hover {
   background: #9a3412;
   box-shadow: 0 7px 16px rgb(154 52 18 / 16%);
-  transform: translateY(-1px);
+  transform: scale(1.02);
+}
+
+.auth-google-button:active:not(:disabled),
+.auth-primary-button:active:not(:disabled),
+.auth-secondary-button:active {
+  transform: scale(0.97);
+  box-shadow: 0 3px 12px rgb(194 65 12 / 14%);
 }
 
 .auth-google-button:disabled,
@@ -417,11 +428,6 @@
   text-align: center;
 }
 
-.auth-loading {
-  color: #64748b;
-  font-size: 14px;
-}
-
 @keyframes auth-enter {
   from {
     opacity: 0;
@@ -453,5 +459,12 @@
   .auth-primary-button,
   .auth-secondary-button {
     transition: none;
+  }
+
+  .auth-google-button:is(:hover, :active),
+  .auth-primary-button:is(:hover, :active),
+  .auth-secondary-button:is(:hover, :active) {
+    transform: none;
+    box-shadow: none;
   }
 }

@@ -1,94 +1,64 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
+import { AlertCircle, ArrowLeft, Atom, CheckCircle2, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck } from 'lucide-react';
 import {
-  AlertCircle,
-  ArrowLeft,
-  Atom,
-  CheckCircle2,
-  Eye,
-  EyeOff,
-  GraduationCap,
-  LockKeyhole,
-  Mail,
-  UserRound,
-} from 'lucide-react';
-import {
+  confirmPasswordReset,
   createUserWithEmailAndPassword,
   GoogleAuthProvider,
+  sendEmailVerification,
   sendPasswordResetEmail,
-  signInAnonymously,
   signInWithEmailAndPassword,
   signInWithPopup,
-  signOut as firebaseSignOut,
-  updatePassword as updateFirebasePassword,
+  signOut,
   updateProfile,
+  verifyPasswordResetCode,
+  type AuthError,
 } from 'firebase/auth';
-import { useAccess, type AccessProfile } from '../lib/access-context';
-import {
-  auth,
-  getRememberSession as getFirebaseRememberSession,
-  isFirebaseConfigured,
-  setRememberSession as setFirebaseRememberSession,
-} from '../lib/firebase';
-import { getUserProfile, getUserProfileByEmail, isAuthorizedTeacherEmail, saveUserProfile, toAccessProfile } from '../lib/firebase-db';
-import { loginAsTeacherWithPassword } from '../lib/teacher-auth';
-import {
-  getRememberSession as getSupabaseRememberSession,
-  setRememberSession as setSupabaseRememberSession,
-  supabase,
-} from '../lib/supabase';
+import { doc, setDoc } from 'firebase/firestore';
+import { useAccess } from '../lib/access-context';
+import { applySessionPersistence, auth, db, getRememberSession, isFirebaseConfigured, setRememberSession } from '../lib/firebase';
+import { SkeletonBlock } from '../components/Skeleton';
 import './AuthPage.css';
 
 type AuthMode = 'login' | 'register' | 'forgot-password' | 'reset-password';
 
 const passwordRequirements = [
   { label: 'Minimal 8 karakter', test: (value: string) => value.length >= 8 },
-  {
-    label: 'Huruf besar dan kecil',
-    test: (value: string) => /[a-z]/.test(value) && /[A-Z]/.test(value),
-  },
+  { label: 'Huruf besar dan kecil', test: (value: string) => /[a-z]/.test(value) && /[A-Z]/.test(value) },
   { label: 'Minimal satu angka', test: (value: string) => /\d/.test(value) },
 ];
+
+const FIREBASE_SETUP_MESSAGE =
+  'Login belum dapat digunakan karena konfigurasi Firebase belum tersedia. Isi VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, dan VITE_FIREBASE_APP_ID di .env.local, lalu mulai ulang aplikasi. Untuk situs online, isi variabel yang sama pada pengaturan environment hosting.';
 
 function isValidPassword(value: string) {
   return passwordRequirements.every(({ test }) => test(value));
 }
 
-function errorMessage(error: { message: string; code?: string }) {
-  const message = error.message.toLowerCase();
-  const code = error.code ? error.code.toLowerCase() : '';
+function passwordStrength(value: string) {
+  if (!value) return 0;
+  return [
+    value.length >= 8,
+    /[a-z]/.test(value) && /[A-Z]/.test(value),
+    /\d/.test(value),
+    /[^a-zA-Z0-9]/.test(value),
+  ].filter(Boolean).length;
+}
 
-  if (code.includes('user-not-found') || message.includes('user-not-found')) {
-    return 'Email belum terdaftar. Silakan periksa kembali email Anda.';
-  }
-  if (code.includes('wrong-password') || message.includes('wrong-password')) {
-    return 'Password yang Anda masukkan tidak sesuai.';
-  }
-  if (code.includes('user-disabled') || message.includes('user-disabled')) {
-    return 'Akun belum aktif atau telah dinonaktifkan.';
-  }
-  if (
-    message.includes('invalid login credentials') ||
-    code.includes('invalid-credential')
-  ) {
-    return 'Password yang Anda masukkan tidak sesuai atau email belum terdaftar.';
-  }
-  if (message.includes('user already registered') || code.includes('email-already-in-use')) {
-    return 'Email ini sudah terdaftar. Silakan login.';
-  }
-  if (message.includes('password should be') || code.includes('weak-password')) {
-    return 'Kata sandi belum memenuhi kebijakan keamanan (minimal 8 karakter, huruf besar/kecil, dan angka).';
-  }
-  if (message.includes('email not confirmed')) {
-    return 'Verifikasi email Anda terlebih dahulu sebelum login.';
-  }
-  if (message.includes('rate limit') || code.includes('too-many-requests')) {
-    return 'Terlalu banyak percobaan. Coba lagi beberapa saat.';
-  }
-  if (code.includes('popup-closed-by-user')) {
-    return 'Masuk dengan Google dibatalkan.';
-  }
-  return error.message;
+function errorMessage(error: { message: string; code?: string }) {
+  const messages: Record<string, string> = {
+    'auth/invalid-credential': 'Email atau kata sandi tidak sesuai.',
+    'auth/email-already-in-use': 'Email ini sudah terdaftar. Silakan login.',
+    'auth/weak-password': 'Kata sandi belum memenuhi kebijakan keamanan.',
+    'auth/too-many-requests': 'Terlalu banyak percobaan. Coba lagi beberapa saat.',
+    'auth/popup-closed-by-user': 'Jendela login Google ditutup sebelum proses selesai.',
+    'auth/unauthorized-domain': 'Domain website belum diizinkan pada konfigurasi Firebase Authentication.',
+    'auth/operation-not-allowed': 'Metode autentikasi ini belum diaktifkan pada Firebase.',
+    'auth/expired-action-code': 'Tautan reset kata sandi sudah kedaluwarsa. Minta tautan baru.',
+    'auth/invalid-action-code': 'Tautan reset kata sandi tidak valid atau sudah digunakan.',
+    'auth/network-request-failed': 'Tidak dapat terhubung ke Firebase. Periksa koneksi internet, lalu coba lagi.',
+  };
+  return (error.code && messages[error.code]) || error.message;
 }
 
 function safeReturnPath(value: unknown) {
@@ -142,26 +112,10 @@ function PasswordField({
 function GoogleMark() {
   return (
     <svg viewBox="0 0 48 48" className="h-5 w-5" aria-hidden="true">
-      <path
-        fill="#EA4335"
-        d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z"
-        transform="translate(0 5)"
-      />
-      <path
-        fill="#4285F4"
-        d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.72 7.18l7.64 5.93c4.46-4.13 7.12-10.22 7.12-17.58Z"
-        transform="translate(0 0)"
-      />
-      <path
-        fill="#FBBC05"
-        d="M10.53 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19Z"
-        transform="translate(0 5)"
-      />
-      <path
-        fill="#34A853"
-        d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.64-5.93c-2.13 1.43-4.86 2.28-8.26 2.28-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z"
-        transform="translate(0 0)"
-      />
+      <path fill="#EA4335" d="M24 9.5c3.54 0 6.71 1.22 9.21 3.6l6.85-6.85C35.9 2.38 30.47 0 24 0 14.62 0 6.51 5.38 2.56 13.22l7.98 6.19C12.43 13.72 17.74 9.5 24 9.5Z" transform="translate(0 5)" />
+      <path fill="#4285F4" d="M46.98 24.55c0-1.57-.15-3.09-.38-4.55H24v9.02h12.94c-.58 2.96-2.25 5.48-4.72 7.18l7.64 5.93c4.46-4.13 7.12-10.22 7.12-17.58Z" transform="translate(0 0)" />
+      <path fill="#FBBC05" d="M10.53 28.59a14.4 14.4 0 0 1 0-9.18l-7.98-6.19a24 24 0 0 0 0 21.56l7.98-6.19Z" transform="translate(0 5)" />
+      <path fill="#34A853" d="M24 48c6.48 0 11.93-2.13 15.9-5.8l-7.64-5.93c-2.13 1.43-4.86 2.28-8.26 2.28-6.26 0-11.57-4.22-13.46-9.91l-7.98 6.19C6.51 42.62 14.62 48 24 48Z" transform="translate(0 0)" />
     </svg>
   );
 }
@@ -169,43 +123,44 @@ function GoogleMark() {
 export function AuthPage() {
   const location = useLocation();
   const navigate = useNavigate();
-  const { profile, status, enter } = useAccess();
+  const { profile, status, clearProfile } = useAccess();
   const mode = location.pathname.replace(/^\//, '') as AuthMode;
   const isLogin = mode === 'login';
   const isRegister = mode === 'register';
   const isForgot = mode === 'forgot-password';
   const isReset = mode === 'reset-password';
+  const resetCode = new URLSearchParams(location.search).get('oobCode');
   const stateFrom = (location.state as { from?: unknown } | null)?.from;
   const queryFrom = new URLSearchParams(location.search).get('next');
   const returnTo = safeReturnPath(stateFrom ?? queryFrom);
-  const queryRole = new URLSearchParams(location.search).get('role');
 
   const [name, setName] = useState('');
   const [className, setClassName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [teacherPassword, setTeacherPassword] = useState('');
-  const [loginRole, setLoginRole] = useState<'student' | 'teacher'>(
-    queryRole === 'teacher' ? 'teacher' : 'student'
-  );
   const [confirmation, setConfirmation] = useState('');
-  const [remember] = useState(() =>
-    isFirebaseConfigured ? getFirebaseRememberSession() : getSupabaseRememberSession()
-  );
+  const [remember, setRemember] = useState(getRememberSession);
   const [busy, setBusy] = useState(false);
+  const [resetCodeValid, setResetCodeValid] = useState(false);
   const [error, setError] = useState('');
   const [notice, setNotice] = useState('');
   const routeNotice = (location.state as { notice?: string } | null)?.notice ?? '';
+  const checkingResetCode = Boolean(isReset && resetCode && auth && isFirebaseConfigured && !error);
+
+  const strength = useMemo(() => passwordStrength(password), [password]);
 
   useEffect(() => {
-    if (status === 'ready' && profile && !isReset) {
-      const dest =
-        returnTo && returnTo !== '/'
-          ? returnTo
-          : profile.role === 'teacher'
-            ? '/kelas'
-            : '/materi';
-      navigate(dest, { replace: true });
+    if (!isReset || !resetCode || !auth) return;
+    void verifyPasswordResetCode(auth, resetCode).then(() => {
+      setResetCodeValid(true);
+    }).catch((caught: AuthError) => {
+      setError(errorMessage(caught));
+    });
+  }, [isReset, resetCode]);
+
+  useEffect(() => {
+    if (status === 'ready' && profile && auth?.currentUser && !isReset) {
+      navigate(returnTo, { replace: true });
     }
   }, [isReset, navigate, profile, returnTo, status]);
 
@@ -214,17 +169,13 @@ export function AuthPage() {
     setError('');
     setNotice('');
 
-    if (!isFirebaseConfigured && !supabase) {
-      setError(
-        'Layanan database/autentikasi belum dikonfigurasi. Silakan isi konfigurasi Firebase pada file .env.local terlebih dahulu.'
-      );
+    if (!auth) {
+      setError('Layanan autentikasi belum dikonfigurasi. Hubungi administrator website.');
       return;
     }
 
     if ((isRegister || isReset) && !isValidPassword(password)) {
-      setError(
-        'Kata sandi harus memiliki minimal 8 karakter, kombinasi huruf besar dan kecil, serta angka.'
-      );
+      setError('Kata sandi harus memiliki minimal 8 karakter, huruf besar dan kecil, serta angka.');
       return;
     }
     if ((isRegister || isReset) && password !== confirmation) {
@@ -238,387 +189,97 @@ export function AuthPage() {
 
     setBusy(true);
     try {
-      // ----------------------------------------------------------------------
-      // ALUR 1: FIREBASE (Utama)
-      // ----------------------------------------------------------------------
-      if (isFirebaseConfigured && auth) {
-        setFirebaseRememberSession(remember);
-
-        if (isLogin) {
-          if (!email.trim() || !password) {
-            setError('Silakan masukkan email dan kata sandi Anda.');
-            return;
-          }
-
-          let cred;
-          try {
-            cred = await signInWithEmailAndPassword(auth, email.trim(), password);
-          } catch (authErr: any) {
-            const code = authErr?.code || '';
-            const msg = (authErr?.message || '').toLowerCase();
-
-            if (code === 'auth/user-not-found' || msg.includes('user-not-found')) {
-              throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
-            }
-            if (code === 'auth/wrong-password' || msg.includes('wrong-password')) {
-              throw new Error('Password yang Anda masukkan tidak sesuai.');
-            }
-            if (code === 'auth/invalid-credential' || msg.includes('invalid-credential')) {
-              const exists = await getUserProfileByEmail(email.trim());
-              if (!exists) {
-                throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
-              }
-              throw new Error('Password yang Anda masukkan tidak sesuai.');
-            }
-            if (code === 'auth/user-disabled' || msg.includes('user-disabled')) {
-              throw new Error('Akun belum aktif atau telah dinonaktifkan.');
-            }
-            if (code === 'auth/too-many-requests' || msg.includes('too-many-requests')) {
-              throw new Error('Terlalu banyak percobaan masuk yang gagal. Silakan coba lagi beberapa saat.');
-            }
-            throw authErr;
-          }
-
-          // Ambil profil akun dari database Firestore
-          let userDoc = await getUserProfile(cred.user.uid);
-          if (!userDoc && cred.user.email) {
-            userDoc = await getUserProfileByEmail(cred.user.email);
-          }
-
-          if (!userDoc) {
-            await firebaseSignOut(auth);
-            throw new Error('Email belum terdaftar. Silakan periksa kembali email Anda.');
-          }
-
-          if (userDoc.status === 'inactive') {
-            await firebaseSignOut(auth);
-            throw new Error('Akun belum aktif atau telah dinonaktifkan.');
-          }
-
-          // Otomatis deteksi role berdasarkan data akun di database
-          if (userDoc.role === 'teacher') {
-            const isAuth = await isAuthorizedTeacherEmail(cred.user.email || userDoc.email);
-            if (!isAuth) {
-              await firebaseSignOut(auth);
-              throw new Error('Akun guru ini belum diotorisasi. Silakan hubungi admin sekolah.');
-            }
-            enter({ role: 'teacher', name: userDoc.name || cred.user.displayName || 'Guru ATOMIKA' });
-            const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
-            navigate(dest, { replace: true });
-            return;
-          }
-
-          if (userDoc.role === 'student') {
-            enter(toAccessProfile(userDoc));
-            const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
-            navigate(dest, { replace: true });
-            return;
-          }
-
-          await firebaseSignOut(auth);
-          throw new Error('Peran akun tidak valid. Hubungi administrator.');
+      if (isLogin) {
+        setRememberSession(remember);
+        clearProfile();
+        if (auth.currentUser) await signOut(auth);
+        await applySessionPersistence();
+        const { user } = await signInWithEmailAndPassword(auth, email.trim(), password);
+        if (!user.emailVerified) {
+          await signOut(auth);
+          throw new Error('Verifikasi email Anda terlebih dahulu sebelum login.');
         }
-
-        if (isRegister) {
-          const cred = await createUserWithEmailAndPassword(auth, email.trim(), password);
-          await updateProfile(cred.user, { displayName: name.trim() });
-          await saveUserProfile({
-            uid: cred.user.uid,
-            email: email.trim(),
-            name: name.trim().replace(/\s+/g, ' '),
-            className: className.trim().replace(/\s+/g, ' '),
-            role: 'student',
-            updatedAt: new Date().toISOString(),
-          });
-          await firebaseSignOut(auth);
-          navigate('/login', {
-            replace: true,
-            state: { notice: 'Akun berhasil dibuat. Silakan login kembali menggunakan akun Anda.' },
-          });
-          return;
-        }
-
-        if (isForgot) {
-          await sendPasswordResetEmail(auth, email.trim());
-          setNotice(
-            'Jika email terdaftar, tautan pemulihan akan dikirim. Silakan periksa kotak masuk Anda.'
-          );
-          return;
-        }
-
-        if (isReset) {
-          if (auth.currentUser) {
-            await updateFirebasePassword(auth.currentUser, password);
-            await firebaseSignOut(auth);
-            navigate('/login', {
-              replace: true,
-              state: {
-                notice:
-                  'Kata sandi berhasil diperbarui. Silakan login kembali menggunakan kata sandi baru.',
-              },
-            });
-            return;
-          }
-          throw new Error('Sesi reset kata sandi tidak ditemukan atau sudah kedaluwarsa.');
-        }
+        navigate(returnTo, { replace: true });
+        return;
       }
 
-      // ----------------------------------------------------------------------
-      // ALUR 2: SUPABASE (Fallback)
-      // ----------------------------------------------------------------------
-      if (supabase) {
-        setSupabaseRememberSession(remember);
-
-        if (isLogin) {
-          const { error: authError } = await supabase.auth.signInWithPassword({
-            email: email.trim(),
-            password,
+      if (isRegister) {
+        setRememberSession(remember);
+        await applySessionPersistence();
+        const { user } = await createUserWithEmailAndPassword(auth, email.trim(), password);
+        const fullName = name.trim().replace(/\s+/g, ' ');
+        try {
+          await updateProfile(user, { displayName: fullName });
+          if (!db) throw new Error('Database Firebase belum dikonfigurasi.');
+          await setDoc(doc(db, 'profiles', user.uid), {
+            name: fullName,
+            className: className.trim().replace(/\s+/g, ' '),
           });
-          if (authError) throw authError;
-          navigate(returnTo, { replace: true });
-          return;
+          await sendEmailVerification(user, {
+            url: `${window.location.origin}/login`,
+            handleCodeInApp: true,
+          });
+        } catch (caught) {
+          await signOut(auth);
+          throw caught;
         }
-
-        if (isRegister) {
-          const { data, error: authError } = await supabase.auth.signUp({
-            email: email.trim(),
-            password,
-            options: {
-              data: {
-                full_name: name.trim().replace(/\s+/g, ' '),
-                class_name: className.trim().replace(/\s+/g, ' '),
-              },
-              emailRedirectTo: `${window.location.origin}/login`,
-            },
-          });
-          if (authError) throw authError;
-          if (data.session) {
-            const { error: signOutError } = await supabase.auth.signOut();
-            if (signOutError) throw signOutError;
-          }
-          navigate('/login', {
-            replace: true,
-            state: { notice: 'Akun berhasil dibuat. Silakan login kembali menggunakan akun Anda.' },
-          });
-          return;
-        }
-
-        if (isForgot) {
-          const { error: authError } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-            redirectTo: `${window.location.origin}/reset-password`,
-          });
-          if (authError) throw authError;
-          setNotice(
-            'Jika email terdaftar, tautan pemulihan akan dikirim. Silakan periksa kotak masuk Anda.'
-          );
-          return;
-        }
-
-        const { error: authError } = await supabase.auth.updateUser({ password });
-        if (authError) throw authError;
-        const { error: signOutError } = await supabase.auth.signOut();
-        if (signOutError) throw signOutError;
+        await signOut(auth);
         navigate('/login', {
           replace: true,
-          state: {
-            notice:
-              'Kata sandi berhasil diperbarui. Silakan login kembali menggunakan kata sandi baru.',
-          },
+          state: { notice: 'Akun berhasil dibuat. Verifikasi email dari kotak masuk sebelum login.' },
         });
+        return;
       }
+
+      if (isForgot) {
+        await sendPasswordResetEmail(auth, email.trim(), {
+          url: `${window.location.origin}/reset-password`,
+          handleCodeInApp: true,
+        });
+        setNotice('Jika email terdaftar, tautan pemulihan akan dikirim. Silakan periksa kotak masuk Anda.');
+        return;
+      }
+
+      if (!resetCode) throw new Error('Tautan reset kata sandi tidak valid atau sudah kedaluwarsa.');
+      await confirmPasswordReset(auth, resetCode, password);
+      navigate('/login', {
+        replace: true,
+        state: { notice: 'Kata sandi berhasil diperbarui. Silakan login kembali menggunakan kata sandi baru.' },
+      });
     } catch (caught) {
-      const authError =
-        caught instanceof Error
-          ? (caught as { message: string; code?: string })
-          : { message: 'Terjadi kesalahan autentikasi.' };
-      setError(errorMessage(authError));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitStudent = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    setNotice('');
-
-    const trimmedName = name.trim().replace(/\s+/g, ' ');
-    const trimmedClass = className.trim().replace(/\s+/g, ' ');
-
-    if (!trimmedName) {
-      setError('Nama lengkap wajib diisi.');
-      return;
-    }
-    if (!trimmedClass) {
-      setError('Kelas wajib diisi.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      const studentProfile: AccessProfile = {
-        role: 'student',
-        name: trimmedName,
-        className: trimmedClass,
-      };
-
-      // 1. Simpan sesi siswa langsung di context & sessionStorage
-      enter(studentProfile);
-
-      // 2. Sinkronkan sesi siswa ke Firebase jika terkonfigurasi
-      if (isFirebaseConfigured && auth) {
-        let studentUid = auth.currentUser?.uid;
-        if (!studentUid) {
+      const authError = caught instanceof Error ? caught : new Error('Terjadi kesalahan autentikasi.');
+      let message = errorMessage(authError);
+      if (isLogin) {
+        clearProfile();
+        if (auth.currentUser) {
           try {
-            const anonCred = await signInAnonymously(auth);
-            studentUid = anonCred.user.uid;
-          } catch (e) {
-            console.warn('Anonymous student session warning:', e);
-          }
-        }
-        if (studentUid) {
-          try {
-            await saveUserProfile({
-              uid: studentUid,
-              email: auth.currentUser?.email || '',
-              name: trimmedName,
-              className: trimmedClass,
-              role: 'student',
-              status: 'active',
-              updatedAt: new Date().toISOString(),
-            });
-          } catch (e) {
-            console.warn('Gagal menyimpan data siswa ke Firestore:', e);
+            await signOut(auth);
+          } catch (cleanupError) {
+            console.error('Gagal membersihkan sesi Firebase setelah login gagal:', cleanupError);
+            message += ' Sesi lama belum dapat dibersihkan, tetapi Anda dapat mencoba login kembali.';
           }
         }
       }
-
-      // 3. Arahkan murid ke materi belajar
-      const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
-      navigate(dest, { replace: true });
-    } catch (caught: any) {
-      setError(caught?.message || 'Terjadi kesalahan saat masuk.');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const submitTeacher = async (event: FormEvent<HTMLFormElement>) => {
-    event.preventDefault();
-    setError('');
-    setNotice('');
-
-    if (!teacherPassword.trim()) {
-      setError('Silakan masukkan sandi khusus guru.');
-      return;
-    }
-
-    setBusy(true);
-    try {
-      await loginAsTeacherWithPassword(teacherPassword.trim());
-      enter({ role: 'teacher', name: 'Guru ATOMIKA' });
-      const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
-      navigate(dest, { replace: true });
-    } catch (caught: any) {
-      setError(caught?.message || 'Sandi guru tidak sesuai');
+      setError(message);
     } finally {
       setBusy(false);
     }
   };
 
   const signInWithGoogle = async () => {
+    if (!auth) {
+      setError('Layanan autentikasi belum dikonfigurasi. Hubungi administrator website.');
+      return;
+    }
     setError('');
     setBusy(true);
-
     try {
-      if (isFirebaseConfigured && auth) {
-        setFirebaseRememberSession(remember);
-        const provider = new GoogleAuthProvider();
-        provider.setCustomParameters({ prompt: 'select_account' });
-        const cred = await signInWithPopup(auth, provider);
-        const googleEmail = cred.user.email || '';
-
-        if (!googleEmail) {
-          await firebaseSignOut(auth);
-          throw new Error('Gagal mendapatkan informasi email dari akun Google.');
-        }
-
-        // Cari akun di database Firestore berdasarkan UID atau Email
-        let userDoc = await getUserProfile(cred.user.uid);
-        if (!userDoc) {
-          userDoc = await getUserProfileByEmail(googleEmail);
-        }
-
-        // Cek jika akun guru terotorisasi
-        if (userDoc?.role === 'teacher' || (await isAuthorizedTeacherEmail(googleEmail))) {
-          const isAuth = await isAuthorizedTeacherEmail(googleEmail);
-          if (!isAuth) {
-            await firebaseSignOut(auth);
-            throw new Error('Akun guru Google ini belum diotorisasi. Hubungi administrator.');
-          }
-          enter({ role: 'teacher', name: userDoc?.name || cred.user.displayName || 'Guru ATOMIKA' });
-          const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
-          navigate(dest, { replace: true });
-          return;
-        }
-
-        if (userDoc && userDoc.status === 'inactive') {
-          await firebaseSignOut(auth);
-          throw new Error('Akun belum aktif atau telah dinonaktifkan.');
-        }
-
-        // Akses Murid: tidak memerlukan sandi atau registrasi manual
-        const studentName =
-          userDoc?.name || cred.user.displayName || googleEmail.split('@')[0] || 'Siswa ATOMIKA';
-        const studentClass = userDoc?.className || 'X MIPA';
-        const studentProfile: AccessProfile = {
-          role: 'student',
-          name: studentName,
-          className: studentClass,
-        };
-
-        if (!userDoc) {
-          try {
-            await saveUserProfile({
-              uid: cred.user.uid,
-              email: googleEmail,
-              name: studentName,
-              className: studentClass,
-              role: 'student',
-              status: 'active',
-              updatedAt: new Date().toISOString(),
-            });
-          } catch (e) {
-            console.warn('Gagal menyimpan profil murid Google ke Firestore:', e);
-          }
-        }
-
-        enter(studentProfile);
-        const dest = returnTo && returnTo !== '/' ? returnTo : '/materi';
-        navigate(dest, { replace: true });
-        return;
-      }
-
-      if (supabase) {
-        setSupabaseRememberSession(remember);
-        const { error: authError } = await supabase.auth.signInWithOAuth({
-          provider: 'google',
-          options: {
-            redirectTo: `${window.location.origin}/login?next=${encodeURIComponent(returnTo)}`,
-          },
-        });
-        if (authError) throw authError;
-        return;
-      }
-
-      setError(
-        'Layanan database/autentikasi belum dikonfigurasi. Silakan isi konfigurasi Firebase pada file .env.local terlebih dahulu.'
-      );
+      setRememberSession(remember);
+      await applySessionPersistence();
+      await signInWithPopup(auth, new GoogleAuthProvider());
+      navigate(returnTo, { replace: true });
     } catch (caught) {
-      const authError =
-        caught instanceof Error
-          ? (caught as { message: string; code?: string })
-          : { message: 'Google Sign-In gagal dimulai.' };
+      const authError = caught instanceof Error ? caught : new Error('Google Sign-In gagal dimulai.');
       setError(errorMessage(authError));
     } finally {
       setBusy(false);
@@ -628,26 +289,52 @@ export function AuthPage() {
   if (status === 'loading') {
     return (
       <main className="auth-page">
-        <div className="auth-loading">Memulihkan sesi...</div>
+        <section className="auth-card" role="status" aria-busy="true">
+          <span className="sr-only">Memulihkan sesi...</span>
+          <div className="mb-7 flex items-center gap-3">
+            <SkeletonBlock className="h-12 w-12 shrink-0 rounded-xl" />
+            <div className="flex-1 space-y-2">
+              <SkeletonBlock className="h-4 w-32 rounded" />
+              <SkeletonBlock className="h-3 w-44 max-w-full rounded" />
+            </div>
+          </div>
+          <SkeletonBlock className="mb-3 h-7 w-3/4 rounded" />
+          <SkeletonBlock className="mb-8 h-4 w-full rounded" />
+          <SkeletonBlock className="mb-4 h-12 w-full rounded-xl" />
+          <SkeletonBlock className="mb-4 h-12 w-full rounded-xl" />
+          <SkeletonBlock className="h-12 w-full rounded-xl" />
+        </section>
       </main>
     );
   }
 
-  if (isReset && !profile && status === 'ready') {
+  if (isReset && !resetCodeValid) {
     return (
       <main className="auth-page">
         <section className="auth-card">
           <Brand />
           <div className="auth-heading">
-            <h1>Tautan tidak tersedia</h1>
-            <p>Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.</p>
+            {checkingResetCode ? (
+              <div role="status" aria-busy="true" className="space-y-3">
+                <span className="sr-only">Memeriksa tautan reset...</span>
+                <SkeletonBlock className="h-8 w-56 max-w-full rounded" />
+                <SkeletonBlock className="h-4 w-full rounded" />
+                <SkeletonBlock className="h-4 w-4/5 rounded" />
+              </div>
+            ) : (
+              <>
+                <h1>Tautan tidak tersedia</h1>
+                <p>{!isFirebaseConfigured
+                  ? FIREBASE_SETUP_MESSAGE
+                  : resetCode
+                    ? 'Tautan pemulihan tidak dapat diverifikasi. Periksa koneksi, lalu minta tautan baru.'
+                    : 'Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.'}</p>
+              </>
+            )}
           </div>
-          <Link to="/forgot-password" className="auth-button auth-button-secondary">
-            Kirim ulang tautan pemulihan
-          </Link>
-          <div className="auth-foot">
-            <Link to="/login">Kembali ke halaman login</Link>
-          </div>
+          {error && <div className="auth-message auth-message-error" role="alert"><AlertCircle size={18} aria-hidden="true" /><span>{error}</span></div>}
+          {!resetCode && isFirebaseConfigured && <Link className="auth-secondary-button" to="/forgot-password">Minta tautan baru</Link>}
+          <BackToLogin />
         </section>
       </main>
     );
@@ -655,273 +342,184 @@ export function AuthPage() {
 
   return (
     <main className="auth-page">
-      <section className="auth-card">
+      <section className="auth-card" aria-labelledby="auth-title">
         <Brand />
 
-        {isLogin && (
-          <div className="flex rounded-xl bg-[#FFF8F0] p-1 border border-[#F1E5D8] my-4 gap-1">
-            <button
-              type="button"
-              onClick={() => {
-                setLoginRole('student');
-                setError('');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                loginRole === 'student'
-                  ? 'bg-[#C2410C] text-white shadow-xs'
-                  : 'text-[#475569] hover:text-[#172033] hover:bg-orange-50/70'
-              }`}
-            >
-              <UserRound className="w-4 h-4" aria-hidden="true" />
-              <span>Masuk sebagai Murid</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setLoginRole('teacher');
-                setError('');
-              }}
-              className={`flex-1 flex items-center justify-center gap-2 py-2 px-3 rounded-lg text-xs sm:text-sm font-bold transition-all ${
-                loginRole === 'teacher'
-                  ? 'bg-[#C2410C] text-white shadow-xs'
-                  : 'text-[#475569] hover:text-[#172033] hover:bg-orange-50/70'
-              }`}
-            >
-              <GraduationCap className="w-4 h-4" aria-hidden="true" />
-              <span>Masuk sebagai Guru</span>
-            </button>
-          </div>
-        )}
-
         <div className="auth-heading">
-          <h1>
-            {loginRole === 'teacher' ? 'Portal Akses Guru' : 'Akses Siswa ATOMIKA'}
-            {isForgot && ' · Atur Ulang Kata Sandi'}
-            {isReset && ' · Buat Kata Sandi Baru'}
-          </h1>
-          <p>
-            {loginRole === 'teacher'
-              ? 'Masukkan sandi khusus guru untuk membuka Dashboard Guru dan manajemen kelas.'
-              : 'Masukkan nama lengkap dan kelas untuk langsung mulai belajar Struktur Atom tanpa perlu kata sandi.'}
-          </p>
+          {isLogin && (
+            <>
+              <h1 id="auth-title">Selamat Datang Kembali!</h1>
+              <p>Masuk untuk melanjutkan perjalanan belajar kimia Anda.</p>
+            </>
+          )}
+          {isRegister && (
+            <>
+              <h1 id="auth-title">Buat Akun Baru</h1>
+              <p>Daftar sekarang untuk mulai menggunakan website.</p>
+            </>
+          )}
+          {isForgot && (
+            <>
+              <h1 id="auth-title">Lupa Kata Sandi?</h1>
+              <p>Masukkan email akun Anda. Kami akan mengirim tautan untuk memulihkan akses.</p>
+            </>
+          )}
+          {isReset && (
+            <>
+              <h1 id="auth-title">Buat Kata Sandi Baru</h1>
+              <p>Pilih kata sandi baru yang kuat untuk melindungi akun Anda.</p>
+            </>
+          )}
         </div>
 
-        {routeNotice && (
-          <div className="auth-alert auth-alert-success" role="status">
-            <CheckCircle2 size={18} aria-hidden="true" />
-            <span>{routeNotice}</span>
+        {!isFirebaseConfigured && (
+          <div className="auth-message auth-message-error" role="alert">
+            <AlertCircle size={18} aria-hidden="true" />
+            <span>{FIREBASE_SETUP_MESSAGE}</span>
           </div>
         )}
-        {notice && (
-          <div className="auth-alert auth-alert-success" role="status">
+        {(notice || routeNotice) && (
+          <div className="auth-message auth-message-success" role="status">
             <CheckCircle2 size={18} aria-hidden="true" />
-            <span>{notice}</span>
+            <span>{notice || routeNotice}</span>
           </div>
         )}
         {error && (
-          <div className="auth-alert auth-alert-error" role="alert">
+          <div className="auth-message auth-message-error" role="alert">
             <AlertCircle size={18} aria-hidden="true" />
             <span>{error}</span>
           </div>
         )}
 
-        {isLogin && loginRole === 'teacher' ? (
+        {isLogin && (
           <>
-            <form onSubmit={submitTeacher} className="auth-form" noValidate>
-              <PasswordField
-                id="teacherPassword"
-                label="Sandi Khusus Guru"
-                value={teacherPassword}
-                onChange={setTeacherPassword}
-                autoComplete="current-password"
-              />
-
-              <div className="rounded-xl bg-[#FFF8F0] border border-[#F1E5D8] p-3 text-xs text-[#64748B] leading-relaxed">
-                🔑 Guru dapat langsung mengakses Dashboard Guru menggunakan sandi otorisasi tanpa perlu mendaftarkan email satu per satu.
-              </div>
-
-              <button
-                type="submit"
-                className="auth-button auth-button-primary"
-                disabled={busy}
-              >
-                {busy ? (
-                  <span>Memvalidasi sandi...</span>
-                ) : (
-                  <span>Masuk sebagai Guru</span>
-                )}
-              </button>
-            </form>
-
-            <div className="auth-foot">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginRole('student');
-                  setError('');
-                }}
-                className="auth-link-subtle text-xs"
-              >
-                Bukan guru? Masuk sebagai Murid di sini
-              </button>
-            </div>
-          </>
-        ) : !isForgot && !isReset ? (
-          <>
-            <form onSubmit={submitStudent} className="auth-form" noValidate>
-              <label className="auth-field" htmlFor="studentName">
-                <span>Nama Lengkap</span>
-                <span className="auth-input-wrap">
-                  <UserRound size={18} aria-hidden="true" />
-                  <input
-                    id="studentName"
-                    name="studentName"
-                    type="text"
-                    value={name}
-                    onChange={(event) => setName(event.target.value)}
-                    placeholder="Contoh: Anisa Putri"
-                    autoComplete="name"
-                    maxLength={80}
-                    required
-                  />
-                </span>
-              </label>
-
-              <label className="auth-field" htmlFor="studentClass">
-                <span>Kelas</span>
-                <span className="auth-input-wrap">
-                  <GraduationCap size={18} aria-hidden="true" />
-                  <input
-                    id="studentClass"
-                    name="studentClass"
-                    type="text"
-                    value={className}
-                    onChange={(event) => setClassName(event.target.value)}
-                    placeholder="Contoh: X MIPA 1"
-                    autoComplete="organization"
-                    maxLength={40}
-                    required
-                  />
-                </span>
-              </label>
-
-              <div className="rounded-xl bg-[#FFF8F0] border border-[#F1E5D8] p-3 text-xs text-[#64748B] leading-relaxed">
-                ✨ Akses Murid tidak memerlukan kata sandi. Cukup masukkan nama dan kelas untuk langsung mulai belajar dan bereksplorasi.
-              </div>
-
-              <button
-                type="submit"
-                className="auth-button auth-button-primary"
-                disabled={busy}
-              >
-                {busy ? <span>Menyiapkan sesi belajar...</span> : <span>Mulai Belajar</span>}
-              </button>
-            </form>
-
-            <div className="auth-divider">
-              <span>atau</span>
-            </div>
-
-            <button
-              type="button"
-              className="auth-button auth-button-oauth"
-              onClick={signInWithGoogle}
-              disabled={busy}
-            >
+            <button type="button" className="auth-google-button" onClick={() => void signInWithGoogle()} disabled={busy || !isFirebaseConfigured}>
               <GoogleMark />
-              <span>Masuk dengan Akun Google</span>
+              <span>Login dengan Google</span>
             </button>
-
-            <div className="auth-foot">
-              <button
-                type="button"
-                onClick={() => {
-                  setLoginRole('teacher');
-                  setError('');
-                }}
-                className="auth-link-subtle text-xs"
-              >
-                Bapak/Ibu Guru? Masuk dengan Sandi Guru di sini
-              </button>
-            </div>
-          </>
-        ) : (
-          <>
-            <form onSubmit={submit} className="auth-form" noValidate>
-              {!isReset && (
-                <label className="auth-field" htmlFor="email">
-                  <span>Alamat Email</span>
-                  <span className="auth-input-wrap">
-                    <Mail size={18} aria-hidden="true" />
-                    <input
-                      id="email"
-                      name="email"
-                      type="email"
-                      value={email}
-                      onChange={(event) => setEmail(event.target.value)}
-                      placeholder="nama@sekolah.sch.id"
-                      autoComplete="email"
-                      required
-                    />
-                  </span>
-                </label>
-              )}
-
-              {isReset && (
-                <>
-                  <PasswordField
-                    id="password"
-                    label="Kata Sandi Baru"
-                    value={password}
-                    onChange={setPassword}
-                    autoComplete="new-password"
-                  />
-                  <PasswordField
-                    id="confirmation"
-                    label="Konfirmasi Kata Sandi"
-                    value={confirmation}
-                    onChange={setConfirmation}
-                    autoComplete="new-password"
-                  />
-                </>
-              )}
-
-              <button
-                type="submit"
-                className="auth-button auth-button-primary"
-                disabled={busy}
-              >
-                {busy ? (
-                  <span>Memproses...</span>
-                ) : (
-                  <span>{isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}</span>
-                )}
-              </button>
-            </form>
-
-            <div className="auth-foot">
-              <Link to="/login" className="auth-foot-back">
-                <ArrowLeft size={16} aria-hidden="true" />
-                <span>Kembali ke halaman login</span>
-              </Link>
-            </div>
+            <div className="auth-divider"><span>Atau masuk menggunakan email</span></div>
           </>
         )}
+
+        <form className="auth-form" onSubmit={(event) => void submit(event)}>
+          {isRegister && (
+            <label className="auth-field" htmlFor="full-name">
+              <span>Nama lengkap</span>
+              <span className="auth-input-wrap">
+                <span className="auth-user-icon" aria-hidden="true">A</span>
+                <input id="full-name" name="name" type="text" autoComplete="name" maxLength={80} value={name} onChange={(event) => setName(event.target.value)} required />
+              </span>
+            </label>
+          )}
+
+          {isRegister && (
+            <label className="auth-field" htmlFor="class-name">
+              <span>Kelas <span className="auth-optional">(opsional)</span></span>
+              <span className="auth-input-wrap">
+                <span className="auth-user-icon" aria-hidden="true">K</span>
+                <input id="class-name" name="className" type="text" autoComplete="off" maxLength={40} placeholder="Contoh: XI IPA 1" value={className} onChange={(event) => setClassName(event.target.value)} />
+              </span>
+            </label>
+          )}
+
+          {(isLogin || isRegister || isForgot) && (
+            <label className="auth-field" htmlFor="email">
+              <span>Alamat email</span>
+              <span className="auth-input-wrap">
+                <Mail size={18} aria-hidden="true" />
+                <input id="email" name="email" type="email" autoComplete="email" maxLength={254} value={email} onChange={(event) => setEmail(event.target.value)} required />
+              </span>
+            </label>
+          )}
+
+          {(isLogin || isRegister || isReset) && (
+            <PasswordField
+              id={isReset ? 'new-password' : 'password'}
+              label={isReset ? 'Kata sandi baru' : 'Kata sandi'}
+              value={password}
+              onChange={setPassword}
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+            />
+          )}
+
+          {(isRegister || isReset) && (
+            <>
+              <div className="auth-password-rules" aria-live="polite">
+                {passwordRequirements.map(({ label, test }) => (
+                  <span key={label} className={test(password) ? 'is-valid' : ''}>
+                    <CheckCircle2 size={14} aria-hidden="true" /> {label}
+                  </span>
+                ))}
+              </div>
+              <PasswordField
+                id="confirm-password"
+                label="Konfirmasi kata sandi"
+                value={confirmation}
+                onChange={setConfirmation}
+                autoComplete="new-password"
+              />
+              <div className="auth-strength" aria-label={`Kekuatan kata sandi: ${strength} dari 4`}>
+                <div className="auth-strength-bars">
+                  {[1, 2, 3, 4].map((level) => <span key={level} className={strength >= level ? `strength-${strength}` : ''} />)}
+                </div>
+                <span>{password ? ['Lemah', 'Lemah', 'Cukup', 'Baik', 'Kuat'][strength] : 'Kekuatan kata sandi'}</span>
+              </div>
+            </>
+          )}
+
+          {isRegister && (
+            <label className="auth-checkbox">
+              <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+              <span>Ingat kata sandi saya</span>
+              <span className="auth-checkbox-note">Sesi diingat di perangkat ini; kata sandi tidak disimpan.</span>
+            </label>
+          )}
+
+          {isLogin && (
+            <div className="auth-form-options">
+              <label className="auth-checkbox">
+                <input type="checkbox" checked={remember} onChange={(event) => setRemember(event.target.checked)} />
+                <span>Ingat saya di perangkat ini</span>
+              </label>
+              <Link to="/forgot-password">Lupa kata sandi?</Link>
+            </div>
+          )}
+
+          <button type="submit" className="auth-primary-button" disabled={busy || !isFirebaseConfigured} aria-busy={busy}>
+            {busy ? (
+              <>
+                <span className="sr-only">Memproses...</span>
+                <SkeletonBlock className="skeleton-on-brand h-3.5 w-24 rounded" />
+              </>
+            ) : isLogin ? 'Masuk' : isRegister ? 'Buat Akun' : isForgot ? 'Kirim Tautan Pemulihan' : 'Simpan Kata Sandi'}
+          </button>
+        </form>
+
+        {isLogin && (
+          <p className="auth-switch">Belum memiliki akun? <Link to="/register">Daftar Sekarang</Link></p>
+        )}
+        {isRegister && (
+          <p className="auth-switch">Sudah memiliki akun? <Link to="/login">Login</Link></p>
+        )}
+        {isForgot && <BackToLogin />}
+        {isReset && (
+          <p className="auth-security-note"><ShieldCheck size={16} aria-hidden="true" /> Kata sandi dienkripsi dan dikelola oleh sistem autentikasi.</p>
+        )}
       </section>
+      <p className="auth-footer">ATOMIKA · Belajar kimia dengan cara yang lebih interaktif</p>
     </main>
   );
 }
 
 function Brand() {
   return (
-    <Link to="/" className="auth-brand" aria-label="Beranda ATOMIKA">
-      <span className="auth-brand-badge">
-        <Atom size={24} aria-hidden="true" />
-      </span>
-      <div>
-        <span className="auth-brand-title">ATOMIKA</span>
-        <span className="auth-brand-sub">Platform Kimia Fase E</span>
-      </div>
+    <Link to="/login" className="auth-brand" aria-label="ATOMIKA">
+      <span className="auth-brand-icon"><Atom size={25} aria-hidden="true" /></span>
+      <span><strong>ATOMIKA</strong><small>Struktur Atom Interaktif</small></span>
     </Link>
   );
+}
+
+function BackToLogin() {
+  return <Link to="/login" className="auth-back-link"><ArrowLeft size={16} aria-hidden="true" /> Kembali ke halaman login</Link>;
 }

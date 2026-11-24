@@ -17,10 +17,10 @@ Dokumen ini ditulis untuk dua pembaca: dosen/penilai (alasan dan arah produk) da
 
 ## 1. Ringkasan Produk
 
-ATOMIKA adalah website pembelajaran kimia interaktif yang membantu siswa kelas X memahami struktur atom lewat materi bertahap, visualisasi, simulasi, latihan terbimbing, kuis berumpan balik, pencarian materi, dan progres belajar anonim (tanpa akun).
+ATOMIKA adalah website pembelajaran kimia interaktif yang membantu siswa kelas X memahami struktur atom lewat materi bertahap, visualisasi, simulasi, latihan terbimbing, kuis berumpan balik, pencarian materi, dan progres belajar per akun. Siswa wajib login sebelum membuka beranda maupun fitur belajar; halaman autentikasi tetap dapat dibuka tanpa sesi.
 
-- **Pengguna utama:** siswa SMA/MA kelas X. **Pendukung:** guru kimia (memakai sebagai media, tanpa akun guru).
-- **Empat fitur inti:** (1) Materi dan pencarian, (2) Laboratorium Atom, (3) Kuis berumpan balik, (4) Progres anonim.
+- **Pengguna utama:** siswa SMA/MA kelas X (akun diperlukan). Guru kimia memakai panel guru dengan akses khusus.
+- **Empat fitur inti:** (1) Materi dan pencarian, (2) Laboratorium Atom, (3) Kuis berumpan balik, (4) Progres lokal per UID siswa.
 - **Prinsip:** akurat secara ilmiah, interaktif, umpan balik menjelaskan alasan, responsif, privat.
 - **Catatan penting:** fitur yang berfungsi tidak otomatis membuktikan hasil belajar meningkat. Klaim efektivitas butuh evaluasi tersendiri (Bagian 16).
 
@@ -47,22 +47,22 @@ Masalah berikut adalah **hipotesis kebutuhan** yang perlu dikonfirmasi lewat obs
 | Aspek | Keputusan |
 |---|---|
 | Stack | React 18 + TypeScript + Vite + Tailwind CSS. React Router memakai `HashRouter` (aman untuk hosting statis). Vitest untuk logika |
-| Backend | Tidak ada. Semua konten di `src/data`, progres di browser |
+| Backend | Konten di `src/data`, progres di browser per UID. Firebase Authentication wajib dikonfigurasi untuk akses aplikasi; Firestore digunakan untuk fitur sinkronisasi yang mengandalkannya |
 | Visual | SVG + komponen React. Tanpa LaTeX/KaTeX. Notasi atom dibuat komponen `AtomNotation` (A di atas, Z di bawah, simbol) |
 | Cakupan unsur | **Z = 1–20 untuk seluruh fitur** (Lab, kalkulator, simulator ion, kuis) |
 | Konfigurasi elektron | **Tidak dimasukkan.** Tidak ada materi, soal, atau latihan konfigurasi elektron, subkulit, orbital, atau bilangan kuantum |
 | Model visual | Bohr disederhanakan. Jumlah elektron per kulit hanya untuk menggambar (kapasitas 2, 8, 8, sisanya kulit ke-4) dan wajib diberi label penyederhanaan |
 | Kuis | 3 paket (satu per topik) × 5 soal = 15 soal. Satu jawaban per soal. Nilai = benar ÷ 5 × 100. Simpan nilai **terakhir dan terbaik** |
-| Progres | `localStorage`, kunci `atomika-progress-v1`. Status topik **diturunkan** dari data, bukan disimpan ganda |
+| Progres | `localStorage` per UID siswa (`atomika-progress-v1:{uid}`). Bagian dibaca, status topik, hasil kuis, lab, dan aktivitas tersimpan per siswa. Key global lama hanya dipertahankan pada namespace anonim dan tidak digabungkan ke akun. Status topik **diturunkan** dari data, bukan disimpan ganda |
 | Pencarian | Sisi klien, indeks dari data materi, skor berbobot (Bagian 7.1) |
-| Di luar MVP | Akun, sinkronisasi, dasbor guru, papan peringkat, chatbot AI, LMS, analitik, gim bercabang, aplikasi nanoteknologi |
+| Di luar MVP | Sinkronisasi LMS, papan peringkat, chatbot AI, analitik, gim bercabang, aplikasi nanoteknologi |
 | Bahasa | Seluruh antarmuka dan konten Bahasa Indonesia |
 
 ---
 
 ## 4. Ruang Lingkup
 
-**Termasuk MVP:** beranda, 3 topik (materi + ilustrasi + contoh + ringkasan), pencarian, Laboratorium Atom (Partikel, Kalkulator, Ion), latihan terbimbing, kuis berumpan balik, halaman progres, reset dengan konfirmasi, UI responsif, halaman 404.
+**Termasuk MVP:** login wajib sebelum beranda dan halaman belajar, 3 topik (materi + ilustrasi + contoh + ringkasan), pencarian, Laboratorium Atom (Partikel, Kalkulator, Ion), latihan terbimbing, kuis berumpan balik, halaman progres per UID, reset dengan konfirmasi, UI responsif, halaman 404.
 
 **Asumsi:** browser modern; progres hanya di browser dan perangkat yang sama dan bisa hilang jika data situs dihapus; konten harus ditinjau guru/ahli materi sebelum dipakai luas; kedalaman materi mengikuti ATP pada Bagian 6.
 
@@ -211,7 +211,7 @@ Aturan gambar inti: jika A ≤ 24 gambar semua nukleon; jika A > 24 gambar maksi
 
 **Kriteria penerimaan:** 15 soal punya kunci terverifikasi dan penjelasan; nilai sesuai aturan; kuis bisa diulang; jawaban salah tidak membuat aplikasi macet; hasil tersimpan ke progres.
 
-### 7.4 Fitur 4 — Progres Anonim
+### 7.4 Fitur 4 — Progres Per Akun
 
 **Tiga butir per topik:** (a) semua bagian materi dibuka, (b) latihan Lab topik itu selesai, (c) kuis topik diselesaikan (nilai berapa pun).
 
@@ -228,15 +228,16 @@ Aturan gambar inti: jika A ≤ 24 gambar semua nukleon; jika A > 24 gambar maksi
 
 | Rute | Halaman | Isi utama |
 |---|---|---|
-| `/` | Beranda | Hero + tombol Mulai Belajar, pintasan ke fitur, info penyimpanan lokal |
+| `/` | Beranda | Hero + tombol Mulai Belajar, 3 `TopicCard`, pintasan Lab dan Kuis, ringkasan progres, info penyimpanan lokal |
 | `/materi` | Daftar materi | `SearchBar`, `SearchResults`, daftar 3 topik |
 | `/materi/:topicId?s=:sectionId` | Materi topik | Bagian materi, ilustrasi, contoh, ringkasan, tombol ke latihan terkait |
 | `/lab/:mode` | Laboratorium | Tab Partikel, Kalkulator, Ion |
 | `/kuis` | Pilih paket | 3 paket, jumlah soal, aturan nilai |
 | `/kuis/:topicId` | Mengerjakan kuis | Soal, `FeedbackPanel`, `QuizResult` |
+| `/progres` | Progres belajar | `ProgressOverview`, reset |
 | `*` | 404 | Pesan dan tombol ke Beranda |
 
-Navigasi utama: Beranda, Materi, Laboratorium Atom, Kuis, dan Kegiatan Kelas. Pada ponsel berupa menu ringkas/tab dengan label teks. Data progres tetap digunakan secara internal untuk pencatatan hasil kuis dan pembukaan paket kuis.
+Navigasi utama: Beranda, Materi, Laboratorium Atom, Kuis, Progres Belajar. Pada ponsel berupa menu ringkas/tab bawah dengan label teks.
 
 ---
 
