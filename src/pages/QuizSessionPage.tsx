@@ -5,6 +5,7 @@ import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess } from '../lib/access-context';
 import { isTopicCompleted, saveProgressForKey, getProgressForKey, useProgress } from '../lib/progress';
 import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
+import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import type { Topic, TopicId } from '../types';
 import { ArrowLeft, HelpCircle, AlertCircle, CheckCircle2, RotateCcw, Send, Lock, ArrowRight } from 'lucide-react';
 
@@ -19,9 +20,9 @@ function quizStorageKey(storageKey: string, topicId: TopicId) {
   return `${storageKey}:quiz-${topicId}-v1`;
 }
 
-function readQuizSession(storageKey: string, topicId: TopicId): SavedQuizSession {
+function readQuizSession(topicId: TopicId): SavedQuizSession {
   try {
-    const raw = window.localStorage.getItem(quizStorageKey(storageKey, topicId));
+    const raw = window.localStorage.getItem(quizStorageKey(topicId));
     if (!raw) return { answers: {}, submitted: false };
 
     const saved = JSON.parse(raw) as Partial<SavedQuizSession>;
@@ -35,9 +36,9 @@ function readQuizSession(storageKey: string, topicId: TopicId): SavedQuizSession
   }
 }
 
-function writeQuizSession(storageKey: string, topicId: TopicId, session: SavedQuizSession): boolean {
+function writeQuizSession(topicId: TopicId, session: SavedQuizSession): boolean {
   try {
-    window.localStorage.setItem(quizStorageKey(storageKey, topicId), JSON.stringify(session));
+    window.localStorage.setItem(quizStorageKey(topicId), JSON.stringify(session));
     return true;
   } catch (error) {
     console.error('Gagal menyimpan jawaban kuis:', error);

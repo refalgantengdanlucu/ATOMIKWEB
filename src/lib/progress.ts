@@ -1,7 +1,6 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LocalProgress, ProgressActivity, TopicId } from '../types';
 import { TOPICS } from '../data/topics';
-import { useAccess } from './access-context';
 
 // ─────────────────────────────────────────────────────────
 // Kebijakan Namespace per Pengguna (AD17-05)
@@ -59,20 +58,11 @@ export type LabModeId = (typeof LAB_MODES)[number]['id'];
  * Tidak pernah membaca kunci pengguna lain.
  */
 export function getProgressForKey(storageKey: string): LocalProgress {
-  if (typeof window === 'undefined') return DEFAULT_PROGRESS;
+  if (typeof window === 'undefined' || !window.localStorage) {
+    return DEFAULT_PROGRESS;
+  }
   try {
-    const storage = window.localStorage;
-    if (!storage) return DEFAULT_PROGRESS;
-    if (storageKey === ANONYMOUS_KEY && !storage.getItem(ANONYMOUS_KEY)) {
-      const legacy = storage.getItem(LEGACY_ANONYMOUS_KEY);
-      if (legacy) {
-        const parsedLegacy = JSON.parse(legacy) as Partial<LocalProgress>;
-        if (parsedLegacy.version === 1 && Array.isArray(parsedLegacy.visitedSectionIds)) {
-          storage.setItem(ANONYMOUS_KEY, legacy);
-        }
-      }
-    }
-    const raw = storage.getItem(storageKey);
+    const raw = window.localStorage.getItem(storageKey);
     if (!raw) return DEFAULT_PROGRESS;
     const parsed = JSON.parse(raw) as Partial<LocalProgress>;
     if (parsed && parsed.version === 1 && Array.isArray(parsed.visitedSectionIds)) {
@@ -80,15 +70,6 @@ export function getProgressForKey(storageKey: string): LocalProgress {
         ...DEFAULT_PROGRESS,
         ...parsed,
         visitedSectionIds: parsed.visitedSectionIds,
-        activityLog: Array.isArray(parsed.activityLog)
-          ? parsed.activityLog.filter(
-              (item): item is ProgressActivity =>
-                Boolean(item) &&
-                typeof item.activity === 'string' &&
-                typeof item.path === 'string' &&
-                typeof item.occurredAt === 'string'
-            )
-          : [],
         labDone: {
           ...DEFAULT_PROGRESS.labDone,
           ...(parsed.labDone && typeof parsed.labDone === 'object' ? parsed.labDone : {}),
@@ -113,12 +94,10 @@ export function getProgress(): LocalProgress {
  * lalu memancarkan event reaktif.
  */
 export function saveProgressForKey(storageKey: string, progress: LocalProgress): void {
-  if (typeof window === 'undefined') return;
+  if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const storage = window.localStorage;
-    if (!storage) return;
     const updated: LocalProgress = { ...progress, updatedAt: new Date().toISOString() };
-    storage.setItem(storageKey, JSON.stringify(updated));
+    window.localStorage.setItem(storageKey, JSON.stringify(updated));
     window.dispatchEvent(
       new CustomEvent(PROGRESS_EVENT_NAME, { detail: { storageKey, progress: updated } })
     );

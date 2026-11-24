@@ -3,6 +3,7 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAccess } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
+import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import type { StudentActivity } from '../lib/classroom';
 import { sendActivityToSheets } from '../lib/classroom-sync';
 import { saveStudentActivity } from '../lib/firebase-db';
@@ -112,13 +113,22 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
               : 'Beranda';
     const currentActivity = blocked ? `${activity} · akses terkunci` : activity;
 
-    const validSectionId = sectionId && SECTIONS.some((item) => item.id === sectionId)
-      ? sectionId
-      : undefined;
-    if (validSectionId) markAsRead(validSectionId);
-    const visitedSectionIds = validSectionId && !progress.visitedSectionIds.includes(validSectionId)
-      ? [...progress.visitedSectionIds, validSectionId]
-      : progress.visitedSectionIds;
+    const visitKey = `atomika-student-visits-v1:${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
+    let visitedSectionIds: string[] = [];
+    try {
+      const savedVisits = window.localStorage.getItem(visitKey);
+      visitedSectionIds = savedVisits ? JSON.parse(savedVisits) as string[] : [];
+    } catch (error) {
+      console.error('Gagal membaca progres topik siswa:', error);
+    }
+    if (sectionId && SECTIONS.some((item) => item.id === sectionId) && !visitedSectionIds.includes(sectionId)) {
+      visitedSectionIds = [...visitedSectionIds, sectionId];
+      try {
+        window.localStorage.setItem(visitKey, JSON.stringify(visitedSectionIds));
+      } catch (error) {
+        console.error('Gagal menyimpan progres topik siswa:', error);
+      }
+    }
     const progressSummary = TOPICS.map((topic, index) => {
       const count = topic.sectionIds.filter((id) => visitedSectionIds.includes(id)).length;
       return `T${index + 1} ${count}/${topic.sectionIds.length}`;

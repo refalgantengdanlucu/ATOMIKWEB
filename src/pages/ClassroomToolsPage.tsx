@@ -24,6 +24,7 @@ import {
 } from '../lib/classroom';
 import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress } from '../lib/classroom';
 import { useAccess } from '../lib/access-context';
+import { getStorageItem, setStorageItem } from '../lib/safe-storage';
 import { isSheetsSyncConfigured, loadTeacherDataFromSheets, sendProgressToSheets, sendQuizToSheets } from '../lib/classroom-sync';
 import type { TeacherSheetsData, TrackedQuizResult } from '../lib/classroom-sync';
 import { SkeletonBlock, SkeletonTable } from '../components/Skeleton';
@@ -174,11 +175,12 @@ export function ClassroomToolsPage() {
   }, [refresh]);
 
   const save = useCallback((key: string, value: unknown) => {
-    if (!writeClassroomData(key, value)) {
-      setStorageError('Data tidak dapat disimpan di browser ini. Periksa ruang penyimpanan atau pengaturan browser.');
-      return false;
+    const persisted = writeClassroomData(key, value);
+    if (!persisted) {
+      setStorageError('Data tersimpan sementara di memori aplikasi karena penyimpanan browser tidak tersedia. Data ini akan hilang saat halaman ditutup.');
+    } else {
+      setStorageError('');
     }
-    setStorageError('');
     refresh();
     return true;
   }, [refresh]);
@@ -379,12 +381,7 @@ function ReactionQuiz({ initialName, className, onSave, attempts }: { initialNam
 function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unknown) => boolean; pollSession: PollSession }) {
   const submittedKey = `atomika-poll-submitted-${pollSession.id}`;
   const [submittedSessionId, setSubmittedSessionId] = useState(() => {
-    try {
-      return window.localStorage.getItem(submittedKey) === 'true' ? pollSession.id : '';
-    } catch (error) {
-      console.error('Gagal membaca status polling:', error);
-      return '';
-    }
+    return getStorageItem(submittedKey).value === 'true' ? pollSession.id : '';
   });
   const [choice, setChoice] = useState<number | null>(null);
   const [submitError, setSubmitError] = useState('');
@@ -395,14 +392,13 @@ function StudentPoll({ onSave, pollSession }: { onSave: (key: string, value: unk
     const response = { id: crypto.randomUUID(), optionIndex: choice, submittedAt: new Date().toISOString() };
     if (onSave(CLASSROOM_STORAGE_KEYS.poll, { ...pollSession, responses: [...pollSession.responses, response] })) {
       void savePollResponse(pollSession.id, response);
-      try {
-        window.localStorage.setItem(submittedKey, 'true');
-        setSubmittedSessionId(pollSession.id);
-        setSubmitError('');
-      } catch (error) {
-        console.error('Gagal menandai polling yang sudah dikirim:', error);
-        setSubmitError('Jawaban tersimpan, tetapi penanda sekali-kirim gagal disimpan di browser ini.');
-      }
+      const persisted = setStorageItem(submittedKey, 'true');
+      setSubmittedSessionId(pollSession.id);
+      setSubmitError(
+        persisted
+          ? ''
+          : 'Jawaban dan penanda tersimpan sementara di memori aplikasi dan akan hilang saat halaman ditutup.',
+      );
     }
   };
 
