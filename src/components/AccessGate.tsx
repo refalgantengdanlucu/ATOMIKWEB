@@ -3,7 +3,6 @@ import { Link, Navigate, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAccess } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
-import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import type { StudentActivity } from '../lib/classroom';
 import { sendActivityToSheets } from '../lib/classroom-sync';
 import { saveStudentActivity } from '../lib/firebase-db';
@@ -134,7 +133,7 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
       return `T${index + 1} ${count}/${topic.sectionIds.length}`;
     }).join(' · ');
     recordActivityForKey(storageKey, {
-      activity: validSectionId ? `${currentActivity} · Bagian ${validSectionId}` : currentActivity,
+      activity: sectionId ? `${currentActivity} · Bagian ${sectionId}` : currentActivity,
       path: `${location.pathname}${location.search}`,
     });
     const record: StudentActivity = {

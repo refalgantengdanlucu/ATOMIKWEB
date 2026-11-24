@@ -15,6 +15,7 @@ export interface TeacherQuizAttempt {
   id: string;
   uid: string | null;
   alias: string;
+  className?: string | null;
   moduleId: string | null;
   activityName: string;
   attemptType: AttemptType;
@@ -23,6 +24,8 @@ export interface TeacherQuizAttempt {
   maxScore: number | null;
   percent: number | null;
   answers: Record<string, string> | null;
+  elapsedSeconds?: number | null;
+  status?: 'in_progress' | 'submitted' | null;
   serverReceivedAt: Date | null;
 }
 
@@ -68,6 +71,7 @@ function normalizeAttempt(id: string, value: Record<string, unknown>): TeacherQu
       : typeof value.uid === 'string'
         ? `Siswa-${value.uid.slice(0, 6)}`
         : 'Siswa tanpa alias',
+    className: typeof value.className === 'string' ? value.className : null,
     moduleId: typeof value.moduleId === 'string' ? value.moduleId : null,
     activityName: typeof value.activityName === 'string'
       ? value.activityName
@@ -80,6 +84,10 @@ function normalizeAttempt(id: string, value: Record<string, unknown>): TeacherQu
     maxScore: typeof value.maxScore === 'number' && Number.isFinite(value.maxScore) ? value.maxScore : null,
     percent: typeof value.percent === 'number' && Number.isFinite(value.percent) ? value.percent : null,
     answers: normalizeAnswers(value.answers),
+    elapsedSeconds: typeof value.elapsedSeconds === 'number' && Number.isFinite(value.elapsedSeconds)
+      ? value.elapsedSeconds
+      : null,
+    status: value.status === 'in_progress' || value.status === 'submitted' ? value.status : null,
     serverReceivedAt: normalizeServerTime(value.serverReceivedAt),
   };
 }
@@ -131,6 +139,9 @@ export async function saveTopicQuizAttempt({
   score,
   maxScore,
   percent,
+  attemptId,
+  elapsedSeconds,
+  studentIdentity,
 }: {
   moduleId: TopicId;
   activityName: string;
@@ -138,15 +149,22 @@ export async function saveTopicQuizAttempt({
   score: number;
   maxScore: number;
   percent: number;
+  attemptId: string;
+  elapsedSeconds: number;
+  studentIdentity: { uid: string | null; name: string; className: string };
 }): Promise<void> {
   const user = auth?.currentUser;
   if (!db || !user) throw new Error('Sesi Firebase diperlukan untuk mengirim hasil kuis.');
 
-  const attemptRef = doc(collection(db, 'quiz_attempts'));
+  const attemptRef = doc(db, 'quiz_attempts', attemptId);
   await setDoc(attemptRef, {
     id: attemptRef.id,
     uid: user.uid,
-    alias: `Siswa-${user.uid.slice(0, 6)}`,
+    alias: studentIdentity.name || `Siswa-${user.uid.slice(0, 6)}`,
+    className: studentIdentity.className,
+    quizTitle: activityName,
+    elapsedSeconds,
+    status: 'submitted',
     moduleId,
     activityName,
     attemptType: 'practice',

@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { QUIZ_QUESTIONS } from './quizQuestions';
+import { calculateQuizScore } from '../lib/quiz-attempt';
 
 describe('topic quiz question banks', () => {
   it('provides five five-option questions for each topic', () => {
@@ -19,6 +20,25 @@ describe('topic quiz question banks', () => {
   it('balances correct answers across A to E in every topic', () => {
     for (const questions of Object.values(QUIZ_QUESTIONS)) {
       expect(questions.map((question) => question.correct)).toEqual(['a', 'b', 'c', 'd', 'e']);
+    }
+  });
+
+  it('scores all-correct and all-wrong answers correctly and does not count missing answers', () => {
+    for (const questions of Object.values(QUIZ_QUESTIONS)) {
+      const allCorrect = Object.fromEntries(
+        questions.map((question) => [question.id, question.correct])
+      );
+      expect(calculateQuizScore(questions, allCorrect)).toEqual({
+        score: 5,
+        maxScore: 5,
+        percent: 100,
+      });
+
+      expect(calculateQuizScore(questions, {})).toEqual({
+        score: 0,
+        maxScore: 5,
+        percent: 0,
+      });
     }
   });
 });

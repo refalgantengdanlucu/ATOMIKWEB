@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { LocalProgress, ProgressActivity, TopicId } from '../types';
 import { TOPICS } from '../data/topics';
+import { useAccess } from './access-context';
 
 // ─────────────────────────────────────────────────────────
 // Kebijakan Namespace per Pengguna (AD17-05)
@@ -63,7 +64,27 @@ export function getProgressForKey(storageKey: string): LocalProgress {
   }
   try {
     const raw = window.localStorage.getItem(storageKey);
-    if (!raw) return DEFAULT_PROGRESS;
+    if (!raw) {
+      if (storageKey === ANONYMOUS_KEY) {
+        const legacyRaw = window.localStorage.getItem(LEGACY_ANONYMOUS_KEY);
+        if (legacyRaw) {
+          const legacy = JSON.parse(legacyRaw) as Partial<LocalProgress>;
+          const migrated: LocalProgress = {
+            ...DEFAULT_PROGRESS,
+            ...legacy,
+            visitedSectionIds: Array.isArray(legacy.visitedSectionIds) ? legacy.visitedSectionIds : [],
+            labDone: {
+              ...DEFAULT_PROGRESS.labDone,
+              ...(legacy.labDone && typeof legacy.labDone === 'object' ? legacy.labDone : {}),
+            },
+            quizResults: legacy.quizResults || DEFAULT_PROGRESS.quizResults,
+          };
+          window.localStorage.setItem(storageKey, JSON.stringify(migrated));
+          return migrated;
+        }
+      }
+      return DEFAULT_PROGRESS;
+    }
     const parsed = JSON.parse(raw) as Partial<LocalProgress>;
     if (parsed && parsed.version === 1 && Array.isArray(parsed.visitedSectionIds)) {
       return {

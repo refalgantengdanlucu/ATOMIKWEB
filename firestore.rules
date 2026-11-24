@@ -38,6 +38,8 @@ service cloud.firestore {
           'alias',
           'className',
           'quizTitle',
+          'elapsedSeconds',
+          'status',
           'activityName',
           'moduleId',
           'attemptType',
@@ -61,6 +63,8 @@ service cloud.firestore {
           'score',
           'maxScore',
           'percent',
+          'elapsedSeconds',
+          'status',
           'serverReceivedAt'
         ])
         && request.resource.data.id == attemptId
