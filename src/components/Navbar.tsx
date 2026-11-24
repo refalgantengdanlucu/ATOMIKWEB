@@ -1,5 +1,5 @@
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap, LogIn, ArrowRight } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap } from 'lucide-react';
 import { useState } from 'react';
 import { useAccess } from '../lib/access-context';
 import { useProgress } from '../lib/progress';
@@ -109,10 +109,10 @@ export function Navbar() {
             </div>
           </Link>
 
-          {/* Desktop Nav Items (Layar md ke atas) */}
+          {/* Navigasi desktop pada layar lebar */}
           <nav
             aria-label="Navigasi Utama Desktop"
-            className="hidden md:flex items-center gap-1.5"
+            className="hidden 2xl:flex items-center gap-1.5"
           >
             {navItems.map((item) => {
               const Icon = item.icon;
@@ -164,8 +164,7 @@ export function Navbar() {
             })}
           </nav>
 
-          {/* Right Action: User profile if logged in, or Masuk & Mulai Belajar if guest */}
-          {profile ? (
+          {profile && (
             <div className="hidden sm:flex items-center gap-2">
               <div className="text-right">
                 <p className="text-xs font-bold text-[#172033]">{profile.name}</p>
@@ -183,24 +182,6 @@ export function Navbar() {
                 Keluar
               </button>
             </div>
-          ) : (
-            <div className="hidden sm:flex items-center gap-2">
-              <Link
-                to="/login"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl border border-[#F1E5D8] bg-white px-3.5 py-2 text-xs font-semibold text-[#172033] hover:bg-orange-50/80 hover:border-[#F97316]/40 transition-colors shadow-2xs"
-                title="Masuk ke Akun ATOMIKA"
-              >
-                <LogIn className="h-3.5 w-3.5 text-[#F97316]" aria-hidden="true" />
-                <span>Masuk</span>
-              </Link>
-              <Link
-                to="/materi"
-                className="inline-flex min-h-10 items-center gap-1.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] px-3.5 py-2 text-xs font-semibold text-white shadow-xs transition-colors"
-              >
-                <span>Mulai Belajar</span>
-                <ArrowRight className="h-3.5 w-3.5" aria-hidden="true" />
-              </Link>
-            </div>
           )}
 
           {/* Badge Kurikulum */}
@@ -212,10 +193,10 @@ export function Navbar() {
 
         {logoutError && <p role="alert" className="pb-2 text-right text-xs font-semibold text-red-700">{logoutError}</p>}
 
-        {/* Mobile Nav Bar (TETAP DI ATAS LAYAR, tidak disembunyikan, scrollable horizontal) */}
+        {/* Navigasi adaptif untuk ponsel dan tablet */}
         <nav
           aria-label="Navigasi Utama Ponsel Atas"
-          className="md:hidden flex flex-wrap items-center gap-1.5 py-2 border-t border-[#F1E5D8]/60"
+          className="2xl:hidden flex flex-wrap items-center gap-1.5 py-2 border-t border-[#F1E5D8]/60"
         >
           {navItems.map((item) => {
             const Icon = item.icon;
@@ -265,7 +246,7 @@ export function Navbar() {
               </NavLink>
             );
           })}
-          {profile ? (
+          {profile && (
             <button
               type="button"
               onClick={() => void handleExit()}
@@ -274,14 +255,6 @@ export function Navbar() {
               <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
               Keluar
             </button>
-          ) : (
-            <Link
-              to="/login"
-              className="inline-flex min-h-[36px] shrink-0 items-center gap-1.5 rounded-lg bg-[#C2410C] px-3 py-1.5 text-xs font-semibold text-white hover:bg-[#9A3412]"
-            >
-              <LogIn className="h-3.5 w-3.5" aria-hidden="true" />
-              Masuk
-            </Link>
           )}
         </nav>
       </div>

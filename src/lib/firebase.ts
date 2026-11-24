@@ -30,7 +30,16 @@ const firebaseConfig: FirebaseOptions = {
   measurementId: measurementId || undefined,
 };
 
-export const isFirebaseConfigured = Boolean(apiKey && authDomain && projectId && appId);
+export function isFirebaseConfigComplete(
+  config: Pick<FirebaseOptions, 'apiKey' | 'authDomain' | 'projectId' | 'appId'>
+): boolean {
+  const requiredConfig = [config.apiKey, config.authDomain, config.projectId, config.appId];
+  return requiredConfig.every(
+    (value) => Boolean(value) && !value?.toLowerCase().startsWith('your-')
+  );
+}
+
+export const isFirebaseConfigured = isFirebaseConfigComplete(firebaseConfig);
 
 const firebaseApp = isFirebaseConfigured
   ? getApps().length > 0

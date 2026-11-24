@@ -23,8 +23,8 @@ import type { TrackedQuizResult } from './classroom-sync';
  */
 export async function saveStudentActivity(activity: StudentActivity): Promise<void> {
   if (!db || !isFirebaseConfigured) return;
-  const docId = `${normalizeStudentName(activity.name)}_${normalizeStudentName(activity.className)}`;
-  const activityRef = doc(db, 'student_activities', docId);
+  if (!activity.uid) throw new Error('UID siswa diperlukan untuk menyimpan aktivitas.');
+  const activityRef = doc(db, 'student_activities', activity.uid);
   await setDoc(activityRef, activity, { merge: true });
 }
 

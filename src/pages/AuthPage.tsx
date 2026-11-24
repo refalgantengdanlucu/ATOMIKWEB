@@ -28,6 +28,9 @@ const passwordRequirements = [
   { label: 'Minimal satu angka', test: (value: string) => /\d/.test(value) },
 ];
 
+const FIREBASE_SETUP_MESSAGE =
+  'Login belum dapat digunakan karena konfigurasi Firebase belum tersedia. Isi VITE_FIREBASE_API_KEY, VITE_FIREBASE_AUTH_DOMAIN, VITE_FIREBASE_PROJECT_ID, dan VITE_FIREBASE_APP_ID di .env.local, lalu mulai ulang aplikasi. Untuk situs online, isi variabel yang sama pada pengaturan environment hosting.';
+
 function isValidPassword(value: string) {
   return passwordRequirements.every(({ test }) => test(value));
 }
@@ -322,7 +325,7 @@ export function AuthPage() {
               <>
                 <h1>Tautan tidak tersedia</h1>
                 <p>{!isFirebaseConfigured
-                  ? 'Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.'
+                  ? FIREBASE_SETUP_MESSAGE
                   : resetCode
                     ? 'Tautan pemulihan tidak dapat diverifikasi. Periksa koneksi, lalu minta tautan baru.'
                     : 'Tautan reset tidak valid atau sudah kedaluwarsa. Minta tautan pemulihan yang baru.'}</p>
@@ -372,7 +375,7 @@ export function AuthPage() {
         {!isFirebaseConfigured && (
           <div className="auth-message auth-message-error" role="alert">
             <AlertCircle size={18} aria-hidden="true" />
-            <span>Autentikasi belum aktif. Administrator perlu mengisi konfigurasi Firebase pada file environment.</span>
+            <span>{FIREBASE_SETUP_MESSAGE}</span>
           </div>
         )}
         {(notice || routeNotice) && (

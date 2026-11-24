@@ -2,7 +2,7 @@ import { useCallback, useEffect, type ReactNode } from 'react';
 import { Link, Navigate, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAccess } from '../lib/access-context';
-import { CLASSROOM_STORAGE_KEYS, readClassroomData, writeClassroomData } from '../lib/classroom';
+import { CLASSROOM_STORAGE_KEYS, getStudentActivityKey, readClassroomData, writeClassroomData } from '../lib/classroom';
 import type { StudentActivity } from '../lib/classroom';
 import { sendActivityToSheets } from '../lib/classroom-sync';
 import { saveStudentActivity } from '../lib/firebase-db';
@@ -137,6 +137,7 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
       path: `${location.pathname}${location.search}`,
     });
     const record: StudentActivity = {
+      uid: profile.uid,
       name: profile.name,
       className: profile.className,
       activity: currentActivity,
@@ -145,13 +146,14 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
       lastSeen: new Date().toISOString(),
     };
     const activities = readClassroomData<StudentActivity[]>(CLASSROOM_STORAGE_KEYS.activity, []);
-    const studentKey = `${profile.name.trim().toLocaleLowerCase('id-ID')}|${profile.className.trim().toLocaleLowerCase('id-ID')}`;
     const nextActivities = [
-      ...activities.filter((item) => `${item.name.trim().toLocaleLowerCase('id-ID')}|${item.className.trim().toLocaleLowerCase('id-ID')}` !== studentKey),
+      ...activities.filter((item) => getStudentActivityKey(item) !== getStudentActivityKey(record)),
       record,
     ];
     writeClassroomData(CLASSROOM_STORAGE_KEYS.activity, nextActivities);
-    void saveStudentActivity(record);
+    void saveStudentActivity(record).catch((error: unknown) => {
+      console.error('Gagal mengirim aktivitas siswa ke Firestore:', error);
+    });
     void sendActivityToSheets(profile, record);
   }, [blocked, location.pathname, location.search, markAsRead, profile, progress.visitedSectionIds, storageKey]);
 

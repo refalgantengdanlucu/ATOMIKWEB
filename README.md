@@ -44,7 +44,9 @@ npm run preview
 - `vite.config.ts` — Konfigurasi Vite & Tailwind CSS plugin
 - `tsconfig.json` — Konfigurasi TypeScript
 
-## Alur Belajar Siswa
+## Login dan Alur Belajar Siswa
+
+Login wajib untuk membuka beranda maupun fitur belajar. Rute login, pendaftaran, dan pemulihan kata sandi tersedia tanpa sesi; sesudah login siswa kembali ke halaman yang diminta atau ke beranda. Tanpa konfigurasi Firebase, halaman login akan menampilkan variabel yang perlu disiapkan dan proses autentikasi tetap dinonaktifkan.
 
 Siswa membuka materi secara berurutan; seluruh bagian Topik 1–3 harus dibaca sebelum Laboratorium terbuka. Laboratorium memiliki tiga mode (Partikel, Kalkulator Partikel, dan Simulator Ion); setiap mode ditandai selesai saat dibuka. Setelah ketiga mode dibuka, Kuis 1 tersedia. Kuis berikutnya terbuka setelah kuis sebelumnya dikirim. Halaman **Progres** selalu dapat dibuka dan menampilkan status materi, lab, urutan kuis, serta nilai terakhir dan terbaik. Progres tersimpan lokal di browser/perangkat siswa.
 
@@ -66,7 +68,9 @@ URL spreadsheet saja belum mengaktifkan sinkronisasi; koneksi baru aktif setelah
 
 ## Autentikasi
 
-Semua halaman utama memakai Firebase Authentication. Buat aplikasi Web di Firebase, salin `.env.example` menjadi `.env.local`, lalu isi konfigurasi Web Firebase dari **Project settings → Your apps**. Nilai konfigurasi web Firebase berada di sisi klien; jangan menaruh kredensial Admin SDK atau service account di frontend.
+Login diwajibkan sebelum siswa dapat membuka beranda maupun halaman belajar. Jika pengguna belum login, tautan yang diminta disimpan dan dibuka setelah login berhasil. Halaman login, pendaftaran, dan pemulihan kata sandi tetap dapat diakses tanpa sesi.
+
+Autentikasi belum dapat digunakan sampai aplikasi Firebase Web dikonfigurasi. Buat aplikasi Web di Firebase, salin `.env.example` sebagai `.env.local` (PowerShell: `Copy-Item .env.example .env.local`), lalu ganti nilai contoh dengan konfigurasi Web Firebase dari **Project settings → Your apps**. Isi sekurangnya `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, dan `VITE_FIREBASE_APP_ID`. Mulai ulang server Vite setelah mengubah environment. Untuk deployment, tambahkan variabel yang sama pada pengaturan environment hosting dan build ulang. Nilai konfigurasi Web Firebase berada di sisi klien; jangan menaruh kredensial Admin SDK atau service account di frontend.
 
 Di Firebase Console:
 

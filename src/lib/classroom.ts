@@ -126,6 +126,7 @@ export interface StudentProgress {
 }
 
 export interface StudentActivity {
+  uid?: string;
   name: string;
   className: string;
   activity: string;
@@ -136,6 +137,14 @@ export interface StudentActivity {
 
 export function normalizeStudentName(name: string): string {
   return name.trim().replace(/\s+/g, ' ').toLocaleLowerCase('id-ID');
+}
+
+export function getStudentActivityKey(
+  activity: Pick<StudentActivity, 'uid' | 'name' | 'className'>
+): string {
+  return activity.uid?.trim()
+    ? `uid:${activity.uid.trim()}`
+    : `legacy:${normalizeStudentName(activity.name)}|${normalizeStudentName(activity.className)}`;
 }
 
 export function getLocalDateKey(date: Date): string {

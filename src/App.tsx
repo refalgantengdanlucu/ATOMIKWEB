@@ -1,5 +1,4 @@
-import { useEffect } from 'react';
-import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AccessGate } from './components/AccessGate';
 import { AccessProvider } from './components/AccessProvider';
@@ -15,23 +14,9 @@ import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthPage } from './pages/AuthPage';
 import { PanelGuruRoute } from './panel-guru/PanelGuruRoute';
 
-// Sinkronisasi rute jika pengguna membuka URL berformat hash (#/materi)
-function RouteHashSync() {
-  const navigate = useNavigate();
-  useEffect(() => {
-    if (window.location.hash && window.location.hash.startsWith('#/')) {
-      const targetPath = window.location.hash.slice(1);
-      navigate(targetPath, { replace: true });
-    }
-  }, [navigate]);
-
-  return null;
-}
-
 export default function App() {
   return (
-    <BrowserRouter>
-      <RouteHashSync />
+    <HashRouter>
       <AccessProvider>
         <Routes>
           <Route path="/login" element={<AuthPage />} />
@@ -39,19 +24,10 @@ export default function App() {
           <Route path="/forgot-password" element={<AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
           <Route path="/panel-guru/*" element={<PanelGuruRoute />} />
-          {/* Landing Page Publik ATOMIKA (dapat diakses sebelum login) */}
-          <Route
-            path="/"
-            element={
-              <Layout>
-                <HomePage />
-              </Layout>
-            }
-          />
           <Route path="/*" element={<ProtectedApp />} />
         </Routes>
       </AccessProvider>
-    </BrowserRouter>
+    </HashRouter>
   );
 }
 
@@ -60,6 +36,7 @@ function ProtectedApp() {
     <AccessGate>
       <Layout>
         <Routes>
+          <Route path="/" element={<HomePage />} />
           <Route path="/materi" element={<MateriPage />} />
           <Route path="/materi/:topicId" element={<MateriDetailPage />} />
           <Route path="/laboratorium" element={<Navigate to="/laboratorium/partikel" replace />} />

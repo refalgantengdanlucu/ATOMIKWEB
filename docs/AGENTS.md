@@ -8,7 +8,7 @@ Dokumen ini mendefinisikan peran, batasan, keputusan terkunci, dan alur kerja AI
 
 | Peran | Tanggung Jawab Utama |
 |---|---|
-| **Senior Front-End Architect** | Mengimplementasikan komponen React 18, TypeScript murni (strict, tanpa `any`), Tailwind CSS, arsitektur HashRouter, dan performa tinggi bebas error. |
+| **Senior Front-End Architect** | Mengimplementasikan komponen React 19 sesuai `package.json`, TypeScript strict tanpa `any`, Tailwind CSS, arsitektur HashRouter, dan performa yang terukur. |
 | **Chemical Content & Pedagogy Auditor** | Memastikan keakuratan konten sains, keterikatan dengan ATP Fase E, visualisasi Bohr berlabel penyederhanaan, serta pencegahan miskonsepsi. |
 | **Test & Reliability Engineer** | Menulis unit test otomatis (Vitest) untuk fungsi logika perhitungan kimia di `src/lib`, memverifikasi build, serta memvalidasi toleransi error. |
 
@@ -16,12 +16,16 @@ Dokumen ini mendefinisikan peran, batasan, keputusan terkunci, dan alur kerja AI
 
 ## 2. Keputusan Terkunci (Non-Negotiable)
 
-1. **Teknologi:** React 18 + TypeScript + Vite + Tailwind CSS. Routing wajib menggunakan `HashRouter` untuk kompatibilitas hosting statis. Vitest untuk logika murni.
-2. **Penyimpanan Konten & Progres:** Materi/soal berada di `src/data/`; progres belajar lokal disimpan di `localStorage` per UID siswa. Data global lama hanya diisolasi pada namespace anonim, tidak diwariskan otomatis ke akun.
+1. **Teknologi:** React 19 (versi terpasang), TypeScript + Vite + Tailwind CSS. Routing wajib menggunakan `HashRouter` untuk kompatibilitas hosting statis. Vitest untuk logika murni. PRD masih menyebut React 18; perubahan versi perlu diselaraskan pada revisi PRD.
+2. **Penyimpanan Konten & Progres:** Materi/soal berada di `src/data/`; progres dan draf kuis lokal disimpan pada namespace UID siswa. Data global lama hanya diisolasi pada namespace anonim, tidak diwariskan otomatis ke akun. Aktivitas akun baru dibedakan dengan UID, bukan nama/kelas.
 3. **Cakupan Unsur:** Terbatas pada unsur **Z = 1 s.d. 20**.
 4. **Batasan Materi Ketat:** **Dilarang keras** memasukkan materi, latihan, atau soal mengenai konfigurasi elektron ($1s^2 2s^2 \dots$), subkulit, orbital, atau bilangan kuantum.
 5. **Representasi Visual:** Model Bohr disederhanakan (kapasitas 2, 8, 8, sisanya kulit ke-4) dan **wajib** mencantumkan label bahwa ini adalah representasi penyederhanaan bukan skala sebenarnya.
 6. **Desain & Aksesibilitas:** Menggunakan konsep *Atomic Orange — Warm Science* dengan kontras teks tombol utama (`#C2410C`) memenuhi standar WCAG AA ($\ge 4.5:1$).
+
+7. **Integrasi eksternal:** Firebase Authentication dan Firestore hanya aktif bila konfigurasi environment tersedia. Aturan pada `firestore.rules` harus dipublikasikan ke proyek Firebase secara terpisah. Sinkronisasi Google Sheets belum aktif selama URL Web App kosong; PIN sisi klien tidak boleh dipakai untuk melindungi data sensitif.
+
+8. **Routing dan hosting:** Semua rute internal memakai path React Router di dalam hash, misalnya `/#/materi`; jangan mengubah ke `BrowserRouter` tanpa persetujuan dan konfigurasi fallback hosting yang teruji.
 
 ---
 

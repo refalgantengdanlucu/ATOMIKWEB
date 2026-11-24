@@ -54,7 +54,7 @@ export function LandingCta() {
           </div>
           <div className="flex items-center gap-1.5">
             <ShieldCheck className="w-4 h-4 text-[#C2410C]" aria-hidden="true" />
-            <span>Privat & Bebas Akun</span>
+            <span>Progres belajar per akun</span>
           </div>
         </div>
       </div>

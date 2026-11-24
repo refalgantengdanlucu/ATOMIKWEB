@@ -20,6 +20,7 @@ import {
   REACTION_QUESTIONS,
   REACTION_TYPES,
   readClassroomData,
+  getStudentActivityKey,
   writeClassroomData,
 } from '../lib/classroom';
 import type { AttendanceRecord, PollSession, QuizAttempt, StudentActivity, StudentProgress } from '../lib/classroom';
@@ -76,7 +77,7 @@ function currentTimestamp(): string {
 }
 
 function studentActivityKey(activity: StudentActivity): string {
-  return `${normalizeStudentName(activity.name)}|${normalizeStudentName(activity.className)}`;
+  return getStudentActivityKey(activity);
 }
 
 function mergeActivities(local: StudentActivity[], remote: StudentActivity[]): StudentActivity[] {

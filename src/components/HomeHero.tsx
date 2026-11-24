@@ -57,7 +57,7 @@ export function HomeHero() {
 
       {/* Main Two-Column Hero Grid */}
       <div className="relative z-10 grid grid-cols-1 lg:grid-cols-12 gap-8 lg:gap-10 items-center">
-        {/* Kolom Kiri: Copy & CTA */}
+        {/* Kolom Kiri: pengantar materi */}
         <div className="lg:col-span-7 space-y-5">
           {/* Badge Kurikulum */}
           <div data-scroll-reveal className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full text-xs font-semibold bg-[#FFEDD5] text-[#C2410C] border border-[#F97316]/20">
@@ -78,25 +78,6 @@ export function HomeHero() {
             Bukan sekadar menghafal rumus. Eksplorasi proton, neutron, dan elektron secara visual, pahami notasi atom, serta amati pembentukan ion melalui laboratorium interaktif.
           </p>
 
-          {/* Action Buttons */}
-          <div data-scroll-reveal className="pt-2 flex flex-wrap items-center gap-3.5 sm:gap-4">
-            <Link
-              to="/materi"
-              className="inline-flex items-center justify-center gap-2 px-6 py-3.5 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold text-base shadow-md shadow-orange-950/15 transition-all min-h-[44px]"
-            >
-              <span>Mulai Belajar</span>
-              <ArrowRight className="w-5 h-5" aria-hidden="true" />
-            </Link>
-
-            <Link
-              to="/laboratorium/partikel"
-              className="inline-flex items-center justify-center gap-2 px-5 py-3.5 rounded-xl bg-[#FFF8F0] hover:bg-[#FFEDD5] text-[#C2410C] font-semibold text-base border border-[#F1E5D8] transition-colors min-h-[44px]"
-            >
-              <Atom className="w-5 h-5 text-[#F97316]" aria-hidden="true" />
-              <span>Laboratorium Atom</span>
-            </Link>
-          </div>
-
           {/* Value Badges */}
           <div data-scroll-stagger className="pt-4 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-[#475569]">
             <div className="flex items-center gap-1.5">
@@ -105,7 +86,7 @@ export function HomeHero() {
             </div>
             <div className="flex items-center gap-1.5">
               <ShieldCheck className="w-4 h-4 text-[#C2410C]" aria-hidden="true" />
-              <span>Privasi & Bebas Akun (Anonim)</span>
+              <span>Progres belajar tersimpan per akun</span>
             </div>
           </div>
         </div>

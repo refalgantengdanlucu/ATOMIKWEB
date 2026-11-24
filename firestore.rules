@@ -29,6 +29,44 @@ service cloud.firestore {
       allow list, create, update, delete: if false;
     }
 
+    match /student_activities/{userId} {
+      allow read: if isTeacher();
+      allow create, update: if isSignedIn()
+        && request.auth.uid == userId
+        && request.resource.data.keys().hasOnly([
+          'uid',
+          'name',
+          'className',
+          'activity',
+          'path',
+          'progressSummary',
+          'lastSeen'
+        ])
+        && request.resource.data.keys().hasAll([
+          'uid',
+          'name',
+          'className',
+          'activity',
+          'path',
+          'progressSummary',
+          'lastSeen'
+        ])
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.name is string
+        && request.resource.data.name.size() > 0
+        && request.resource.data.name.size() <= 80
+        && request.resource.data.className is string
+        && request.resource.data.className.size() <= 40
+        && request.resource.data.activity is string
+        && request.resource.data.activity.size() <= 200
+        && request.resource.data.path is string
+        && request.resource.data.path.size() <= 300
+        && request.resource.data.progressSummary is string
+        && request.resource.data.progressSummary.size() <= 200
+        && request.resource.data.lastSeen is string;
+      allow delete: if false;
+    }
+
     match /quiz_attempts/{attemptId} {
       allow read: if isTeacher();
       allow create: if isSignedIn()
