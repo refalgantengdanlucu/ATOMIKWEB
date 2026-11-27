@@ -173,7 +173,7 @@ export function Navbar({ expanded, onToggle }: NavbarProps) {
             : 'w-[72px] max-lg:bottom-3 max-lg:right-3 max-lg:top-auto max-lg:h-16 max-lg:flex-row max-lg:items-center max-lg:rounded-full'
         }`}
       >
-        <div className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-stretch gap-3 px-1.5 ${
+        <div className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-stretch gap-3 px-1 ${
           expanded
             ? 'max-lg:min-h-12 max-lg:flex-col max-lg:items-stretch max-lg:gap-2'
             : 'max-lg:flex-row max-lg:items-center max-lg:justify-center'
@@ -215,10 +215,10 @@ export function Navbar({ expanded, onToggle }: NavbarProps) {
         <nav
           ref={navigationRef}
           aria-label="Navigasi Utama"
-          className={`relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-lg:overflow-x-auto max-lg:overflow-y-hidden ${
+          className={`relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden ${
             expanded
-              ? 'max-lg:flex-col max-lg:items-stretch'
-              : 'max-lg:flex-row max-lg:items-center max-lg:py-0'
+              ? 'items-stretch max-lg:flex-col max-lg:overflow-x-auto max-lg:overflow-y-hidden'
+              : 'items-center max-lg:flex-row max-lg:overflow-x-auto max-lg:overflow-y-hidden max-lg:py-0'
           }`}
         >
           <span
@@ -274,10 +274,12 @@ export function Navbar({ expanded, onToggle }: NavbarProps) {
                 ref={active ? activeLinkRef : undefined}
                 title={expanded ? undefined : label}
                 aria-label={label}
-                className={`group relative z-10 flex min-h-11 shrink-0 items-center gap-3 rounded-full px-3 text-sm font-semibold transition-[background-color,color,transform,box-shadow] duration-[250ms] ease-out ${
-                  expanded ? 'w-full' : 'justify-center lg:w-11 lg:px-0'
-                } max-lg:w-11 max-lg:justify-center max-lg:px-0 ${
-                  expanded ? 'max-lg:w-full max-lg:justify-start max-lg:px-3' : ''
+                className={`group relative z-10 flex h-[46px] min-h-[46px] shrink-0 items-center gap-3 rounded-full px-3 text-sm font-semibold transition-[background-color,color,transform,box-shadow] duration-[250ms] ease-out ${
+                expanded ? 'w-full' : 'w-[46px] justify-center px-0'
+                } ${
+                expanded
+                  ? 'max-lg:w-full max-lg:justify-start max-lg:px-3'
+                  : 'max-lg:w-[46px] max-lg:justify-center max-lg:px-0'
                 } ${
                   active
                     ? 'text-[#9A3412]'
