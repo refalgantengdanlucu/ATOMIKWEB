@@ -1,10 +1,16 @@
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap, LogIn } from 'lucide-react';
-import { useEffect, useRef, useState } from 'react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccess } from '../lib/access-context';
 import { useProgress } from '../lib/progress';
 import { useTeacherAccess } from '../panel-guru/useTeacherAccess';
+
+interface NavbarProps {
+  expanded: boolean;
+  onToggle: () => void;
+}
+
 interface NavItem {
   to: string;
   label: string;
@@ -31,7 +37,7 @@ const NAV_ITEMS: NavItem[] = [
   },
 ];
 
-export function Navbar() {
+export function Navbar({ expanded, onToggle }: NavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, exit } = useAccess();
@@ -41,6 +47,9 @@ export function Navbar() {
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
   const logoutCancelRef = useRef<HTMLButtonElement>(null);
   const logoutDialogRef = useRef<HTMLDivElement>(null);
+  const navigationRef = useRef<HTMLElement | null>(null);
+  const activeLinkRef = useRef<HTMLAnchorElement | null>(null);
+  const activeIndicatorRef = useRef<HTMLSpanElement | null>(null);
   const navItems = teacherAccess === 'allowed'
     ? [...NAV_ITEMS, { to: '/panel-guru', label: 'Panel Guru', icon: GraduationCap }]
     : NAV_ITEMS;
@@ -117,15 +126,64 @@ export function Navbar() {
     return false;
   };
 
+  useLayoutEffect(() => {
+    const navigation = navigationRef.current;
+    const indicator = activeIndicatorRef.current;
+    if (!navigation || !indicator) return;
+
+    const updateIndicator = () => {
+      const activeLink = activeLinkRef.current;
+      if (!activeLink) {
+        indicator.style.opacity = '0';
+        return;
+      }
+
+      const navigationBounds = navigation.getBoundingClientRect();
+      const activeLinkBounds = activeLink.getBoundingClientRect();
+      const left = activeLinkBounds.left - navigationBounds.left + navigation.scrollLeft;
+      const top = activeLinkBounds.top - navigationBounds.top + navigation.scrollTop;
+
+      indicator.style.transform = `translate3d(${left}px, ${top}px, 0)`;
+      indicator.style.width = `${activeLinkBounds.width}px`;
+      indicator.style.height = `${activeLinkBounds.height}px`;
+      indicator.style.borderRadius = expanded ? '9999px' : '50%';
+      indicator.style.opacity = '1';
+    };
+
+    updateIndicator();
+    const resizeObserver = new ResizeObserver(updateIndicator);
+    resizeObserver.observe(navigation);
+    if (activeLinkRef.current) resizeObserver.observe(activeLinkRef.current);
+    navigation.addEventListener('scroll', updateIndicator, { passive: true });
+    window.addEventListener('resize', updateIndicator);
+
+    return () => {
+      resizeObserver.disconnect();
+      navigation.removeEventListener('scroll', updateIndicator);
+      window.removeEventListener('resize', updateIndicator);
+    };
+  }, [expanded, location.pathname, navItems.length]);
+
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-[#F1E5D8] bg-white/95 shadow-xs backdrop-blur-md">
-      <div className="mx-auto flex h-16 max-w-6xl items-center gap-2 px-3 sm:gap-3 sm:px-6">
+      <header
+        aria-label="Navigasi ATOMIKA"
+        className={`fixed left-3 top-3 z-50 flex flex-col rounded-[2rem] border border-white/15 bg-gradient-to-b from-[#C2410C] via-[#B63B0B] to-[#9A3412] p-2 text-white shadow-[0_16px_48px_rgba(87,35,13,0.28)] transition-[width,height,border-radius] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] max-lg:w-auto lg:bottom-3 lg:left-3 lg:top-3 ${
+          expanded
+            ? 'w-[248px] max-lg:bottom-3 max-lg:right-3 max-lg:top-auto max-lg:h-[min(70vh,560px)] max-lg:flex-col max-lg:items-stretch'
+            : 'w-[72px] max-lg:bottom-3 max-lg:right-3 max-lg:top-auto max-lg:h-16 max-lg:flex-row max-lg:items-center max-lg:rounded-full'
+        }`}
+      >
+        <div className={`flex min-h-0 w-full min-w-0 flex-1 flex-col items-stretch gap-3 px-1.5 ${
+          expanded
+            ? 'max-lg:min-h-12 max-lg:flex-col max-lg:items-stretch max-lg:gap-2'
+            : 'max-lg:flex-row max-lg:items-center max-lg:justify-center'
+        }`}>
         <Link
           to="/"
-          className="group flex shrink-0 items-center gap-2 rounded-lg p-1 focus:outline-hidden focus:ring-2 focus:ring-[#C2410C] sm:gap-3"
+            className="group flex min-w-0 shrink-0 items-center gap-3 rounded-xl p-1 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFF8F0]"
           aria-label="ATOMIKA Beranda"
         >
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-[#F97316] to-[#C2410C] text-white shadow-sm shadow-orange-950/15 transition-transform group-hover:scale-105">
+            <div className="flex h-10 w-10 items-center justify-center rounded-2xl bg-white/15 text-white shadow-inner shadow-white/10 transition-transform duration-200 group-hover:scale-105">
             <svg
               className="h-6 w-6"
               viewBox="0 0 24 24"
@@ -141,23 +199,33 @@ export function Navbar() {
               <ellipse cx="12" cy="12" rx="9" ry="4" transform="rotate(-30 12 12)" />
             </svg>
           </div>
-          <div className="hidden min-w-0 sm:block">
+          <div className={`min-w-0 transition-[opacity,width] duration-200 ${expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'}`}>
             <div className="flex items-center gap-1.5">
-              <span className="font-extrabold text-xl tracking-tight text-[#172033]">ATOMIKA</span>
-              <span className="hidden 2xl:inline-flex items-center rounded-full bg-[#FFEDD5] px-2 py-0.5 text-[10px] font-semibold text-[#C2410C]">
+              <span className="font-extrabold text-lg tracking-tight text-white">ATOMIKA</span>
+              <span className="inline-flex items-center rounded-full bg-white/15 px-2 py-0.5 text-[10px] font-semibold text-[#FFF8F0]">
                 Fase E
               </span>
             </div>
-            <p className="hidden text-[11px] leading-none text-[#475569] lg:block">
+            <p className="mt-0.5 whitespace-nowrap text-[10px] leading-none text-orange-100">
               Struktur Atom Interaktif SMA/MA
             </p>
           </div>
         </Link>
 
         <nav
+          ref={navigationRef}
           aria-label="Navigasi Utama"
-          className="flex min-w-0 flex-1 items-center gap-1 overflow-x-auto whitespace-nowrap py-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+          className={`relative flex min-h-0 w-full min-w-0 flex-1 flex-col gap-1 overflow-y-auto py-2 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden max-lg:overflow-x-auto max-lg:overflow-y-hidden ${
+            expanded
+              ? 'max-lg:flex-col max-lg:items-stretch'
+              : 'max-lg:flex-row max-lg:items-center max-lg:py-0'
+          }`}
         >
+          <span
+            ref={activeIndicatorRef}
+            aria-hidden="true"
+            className="pointer-events-none absolute left-0 top-0 z-0 rounded-full bg-[#FFF1E2] opacity-0 shadow-[0_5px_18px_rgba(255,237,213,0.22)] transition-[transform,width,height,border-radius,opacity] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] motion-reduce:transition-none"
+          />
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
@@ -177,10 +245,24 @@ export function Navbar() {
                   title={item.to === '/laboratorium'
                     ? 'Selesaikan semua materi Topik 1–3 untuk membuka laboratorium'
                     : 'Selesaikan semua mode laboratorium untuk membuka kuis'}
-                  className="flex min-h-10 shrink-0 cursor-not-allowed items-center gap-1.5 rounded-lg border border-transparent px-2.5 text-xs font-semibold text-slate-400 sm:px-3 sm:text-sm"
+                  className={`group relative flex min-h-11 shrink-0 cursor-not-allowed items-center gap-3 rounded-full px-3 text-sm font-semibold text-orange-100/55 transition-colors ${
+                    expanded ? 'w-full' : 'justify-center lg:w-11 lg:px-0'
+                  } max-lg:w-11 max-lg:justify-center max-lg:px-0 ${
+                    expanded ? 'max-lg:w-full max-lg:justify-start max-lg:px-3' : ''
+                  }`}
                 >
-                  <LockKeyhole className="h-4 w-4" aria-hidden="true" />
-                  <span>{label}</span>
+                  <LockKeyhole className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+                  <span className={`truncate transition-[opacity,width] duration-200 ${expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'}`}>
+                    {label}
+                  </span>
+                  {!expanded && (
+                    <span
+                      aria-hidden="true"
+                      className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 z-[60] -translate-x-1 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#172033] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 max-lg:hidden"
+                    >
+                      {label}
+                    </span>
+                  )}
                 </span>
               );
             }
@@ -189,59 +271,118 @@ export function Navbar() {
               <NavLink
                 key={item.to}
                 to={item.to}
-                className={`flex min-h-10 shrink-0 items-center gap-1.5 rounded-lg border px-2.5 text-xs font-semibold transition-all sm:px-3 sm:text-sm ${
+                ref={active ? activeLinkRef : undefined}
+                title={expanded ? undefined : label}
+                aria-label={label}
+                className={`group relative z-10 flex min-h-11 shrink-0 items-center gap-3 rounded-full px-3 text-sm font-semibold transition-[background-color,color,transform,box-shadow] duration-[250ms] ease-out ${
+                  expanded ? 'w-full' : 'justify-center lg:w-11 lg:px-0'
+                } max-lg:w-11 max-lg:justify-center max-lg:px-0 ${
+                  expanded ? 'max-lg:w-full max-lg:justify-start max-lg:px-3' : ''
+                } ${
                   active
-                    ? 'border-[#F97316]/40 bg-[#FFEDD5] text-[#C2410C] shadow-xs'
-                    : 'border-transparent text-[#475569] hover:bg-orange-50/70 hover:text-[#172033]'
-                }`}
+                    ? 'text-[#9A3412]'
+                    : 'text-orange-50/85 hover:bg-white/12 hover:text-white'
+                } hover:scale-[1.03]`}
                 aria-current={active ? 'page' : undefined}
               >
                 <Icon
-                  className={`h-4 w-4 shrink-0 ${active ? 'text-[#C2410C]' : 'text-[#F97316]'}`}
+                  className={`h-[18px] w-[18px] shrink-0 transition-transform duration-200 group-hover:scale-110 ${
+                    active ? 'text-[#C2410C]' : 'text-orange-100'
+                  }`}
                   aria-hidden="true"
                 />
-                <span>{label}</span>
+                <span className={`min-w-0 truncate transition-[opacity,width] duration-200 ${
+                  expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'
+                }`}>
+                  {label}
+                </span>
+                {!expanded && (
+                  <span
+                    aria-hidden="true"
+                    className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 z-[60] -translate-x-1 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#172033] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-visible:translate-x-0 group-focus-visible:opacity-100 max-lg:hidden"
+                  >
+                    {label}
+                  </span>
+                )}
               </NavLink>
             );
           })}
         </nav>
 
-        {profile ? (
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
-            <div className="hidden text-right lg:block">
-              <p className="max-w-36 truncate text-xs font-bold text-[#172033]">{profile.name}</p>
-              <p className="text-[10px] text-[#64748B]">
-                {profile.role === 'teacher' ? 'Guru' : `Siswa · ${profile.className}`}
-              </p>
-            </div>
+        <div className={`flex w-full shrink-0 flex-col gap-2 border-t border-white/15 pt-3 ${
+          expanded
+            ? 'max-lg:flex-col max-lg:items-stretch max-lg:border-l-0 max-lg:border-t max-lg:pl-0 max-lg:pt-3'
+            : 'items-center max-lg:flex-row max-lg:items-center max-lg:gap-1 max-lg:border-l max-lg:border-t-0 max-lg:pl-1 max-lg:pt-0'
+        }`}>
+          {profile ? (
+            <>
+              <div className={`min-w-0 px-2 text-left transition-[opacity,width] duration-200 ${
+                expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden px-0 opacity-0'
+              }`}>
+                <p className="truncate text-xs font-bold text-white">{profile.name}</p>
+                <p className="truncate text-[10px] text-orange-100">
+                  {profile.role === 'teacher' ? 'Guru' : `Siswa · ${profile.className}`}
+                </p>
+              </div>
             <button
               type="button"
               onClick={() => setLogoutDialogOpen(true)}
-              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg border border-[#F1E5D8] px-2.5 text-xs font-semibold text-[#475569] transition-colors hover:bg-orange-50 sm:px-3"
+              className={`inline-flex min-h-11 shrink-0 items-center gap-3 rounded-2xl border border-white/15 px-3 text-sm font-semibold text-orange-50 transition-colors hover:bg-white/12 ${
+                expanded ? 'w-full justify-start' : 'w-11 justify-center px-0'
+              } max-lg:min-h-10 ${
+                expanded
+                  ? 'max-lg:w-full max-lg:justify-start max-lg:px-3'
+                  : 'max-lg:w-10 max-lg:justify-center max-lg:px-0'
+              }`}
               title="Keluar dari akun"
               aria-label="Keluar dari akun"
               aria-haspopup="dialog"
             >
-              <LogOut className="h-3.5 w-3.5" aria-hidden="true" />
-              <span className="hidden sm:inline">Keluar</span>
+              <LogOut className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span className={`transition-[opacity,width] duration-200 ${
+                expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'
+              }`}>Keluar</span>
             </button>
-          </div>
-        ) : (
-          <div className="flex shrink-0 items-center gap-1.5 sm:gap-2">
+            </>
+          ) : (
             <Link
               to="/login"
-              className="inline-flex min-h-10 shrink-0 items-center justify-center gap-1.5 rounded-lg bg-[#C2410C] px-3.5 text-xs font-bold text-white transition-colors hover:bg-[#9A3412] shadow-xs sm:px-4 sm:text-sm"
+              aria-label="Masuk ke akun ATOMIKA"
               title="Masuk ke akun ATOMIKA"
+              className={`inline-flex min-h-11 shrink-0 items-center gap-3 rounded-2xl bg-[#FFF1E2] px-3 text-sm font-bold text-[#9A3412] shadow-sm transition-colors hover:bg-white ${
+                expanded ? 'w-full justify-start' : 'w-11 justify-center px-0'
+              } max-lg:min-h-10 ${
+                expanded
+                  ? 'max-lg:w-full max-lg:justify-start max-lg:px-3'
+                  : 'max-lg:w-10 max-lg:justify-center max-lg:px-0'
+              }`}
             >
-              <LogIn className="h-4 w-4" aria-hidden="true" />
-              <span>Masuk</span>
+              <LogIn className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
+              <span className={`transition-[opacity,width] duration-200 ${
+                expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'
+              }`}>Masuk</span>
             </Link>
-          </div>
-        )}
+          )}
 
-        <div className="hidden shrink-0 items-center gap-1.5 rounded-full border border-[#F1E5D8] bg-[#FFF8F0] px-3 py-1.5 text-xs text-[#475569] 2xl:flex">
-          <Sparkles className="h-3.5 w-3.5 text-[#F97316]" aria-hidden="true" />
-          <span>Kimia SMA/MA</span>
+          <div className={`hidden items-center gap-2 px-2 text-[11px] text-orange-100/85 ${
+            expanded ? '2xl:flex' : ''
+          }`}>
+            <Sparkles className="h-3.5 w-3.5 shrink-0 text-orange-200" aria-hidden="true" />
+            <span>Kimia SMA/MA</span>
+          </div>
+
+          <button
+            type="button"
+            onClick={onToggle}
+            className="inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl text-orange-50/85 transition-colors hover:bg-white/12 hover:text-white focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#FFF8F0] max-lg:h-10 max-lg:w-10"
+            aria-label={expanded ? 'Perkecil navigasi' : 'Perluas navigasi'}
+            aria-expanded={expanded}
+            title={expanded ? 'Perkecil navigasi' : 'Perluas navigasi'}
+          >
+            {expanded
+              ? <PanelLeftClose className="h-[18px] w-[18px]" aria-hidden="true" />
+              : <PanelLeftOpen className="h-[18px] w-[18px]" aria-hidden="true" />}
+          </button>
         </div>
       </div>
       {logoutError && (

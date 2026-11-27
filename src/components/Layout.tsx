@@ -14,6 +14,7 @@ interface LayoutProps {
 
 export function Layout({ children }: LayoutProps) {
   const [storageAvailable, setStorageAvailable] = useState(isPersistentStorageAvailable);
+  const [navExpanded, setNavExpanded] = useState(false);
 
   useEffect(() => {
     const handleStorageStatus = (event: Event) => {
@@ -26,28 +27,29 @@ export function Layout({ children }: LayoutProps) {
 
   return (
     <div className="min-h-screen flex flex-col bg-[#FFF8F0] text-[#172033]">
-      {/* 1. Navbar Utama di Posisi Atas Layar */}
-      <Navbar />
+      <Navbar expanded={navExpanded} onToggle={() => setNavExpanded((expanded) => !expanded)} />
 
-      {!storageAvailable && (
-        <div
-          className="mx-auto mt-3 w-full max-w-6xl px-4 sm:px-6"
-          role="status"
-          aria-live="polite"
-        >
-          <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
-            Penyimpanan browser tidak tersedia. Progres dan data lokal hanya tersimpan sementara di memori aplikasi dan akan hilang saat halaman ditutup.
-          </p>
-        </div>
-      )}
+      <div className={`flex min-w-0 flex-1 flex-col pb-3 transition-[padding] duration-300 ease-[cubic-bezier(0.22,1,0.36,1)] md:pb-20 lg:pb-0 ${
+        navExpanded ? 'lg:pl-[264px]' : 'lg:pl-[88px]'
+      }`}>
+        {!storageAvailable && (
+          <div
+            className="mx-auto mt-3 w-full max-w-6xl px-4 sm:px-6"
+            role="status"
+            aria-live="polite"
+          >
+            <p className="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-950">
+              Penyimpanan browser tidak tersedia. Progres dan data lokal hanya tersimpan sementara di memori aplikasi dan akan hilang saat halaman ditutup.
+            </p>
+          </div>
+        )}
 
-      {/* 2. Area Konten Dinamis (Children / Pages) */}
-      <main className="flex-1 max-w-6xl w-full mx-auto px-4 sm:px-6 py-8">
-        {children}
-      </main>
+        <main className="max-w-6xl w-full flex-1 mx-auto px-4 sm:px-6 py-8">
+          {children}
+        </main>
 
-      {/* 3. Footer Global di Bagian Bawah */}
-      <Footer />
+        <Footer />
+      </div>
     </div>
   );
 }
