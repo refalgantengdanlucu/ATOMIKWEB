@@ -10,13 +10,10 @@ import {
   Atom,
   AlertCircle,
   ExternalLink,
-  Lock,
   Menu,
   X,
 } from 'lucide-react';
-import { useProgress, isSectionUnlocked, isTopicUnlocked } from '../lib/progress';
-import { useAccess } from '../lib/access-context';
-import type { TopicId } from '../types';
+import { useProgress } from '../lib/progress';
 
 export function MateriDetailPage() {
   const { topicId } = useParams<{ topicId: string }>();
@@ -24,7 +21,6 @@ export function MateriDetailPage() {
   const navigate = useNavigate();
 
   const { progress, markAsRead } = useProgress();
-  const { profile } = useAccess();
   const visited = progress.visitedSectionIds;
 
   // Mobile sidebar toggle
@@ -35,27 +31,10 @@ export function MateriDetailPage() {
     (a, b) => a.order - b.order
   );
 
-  const isTeacher = profile?.role === 'teacher';
-  const topicUnlocked =
-    isTeacher ||
-    isTopicUnlocked(topicId as TopicId, visited);
-
   // --- Tentukan bagian aktif ---
   const requestedSectionId = searchParams.get('s');
-  const firstUnlockedSection = isTeacher
-    ? topicSections[0]
-    : topicSections.find((s) => isSectionUnlocked(topicId as TopicId, s.id, visited));
-
-  // Jika bagian yang diminta masih terkunci, fallback ke bagian pertama yang terbuka
   const requestedSection = topicSections.find((s) => s.id === requestedSectionId);
-  const canAccessRequested = Boolean(
-    requestedSection &&
-    (isTeacher || isSectionUnlocked(topicId as TopicId, requestedSection.id, visited))
-  );
-
-  const activeSection = canAccessRequested
-    ? requestedSection
-    : firstUnlockedSection ?? topicSections[0];
+  const activeSection = requestedSection ?? topicSections[0];
 
   const currentIndex = topicSections.findIndex((s) => s.id === activeSection?.id);
   const prevSection = currentIndex > 0 ? topicSections[currentIndex - 1] : null;
@@ -94,33 +73,9 @@ export function MateriDetailPage() {
     );
   }
 
-  if (!topicUnlocked) {
-    return (
-      <div className="py-16 text-center max-w-lg mx-auto">
-        <div className="w-16 h-16 rounded-full bg-[#FFEDD5] text-[#C2410C] flex items-center justify-center mx-auto mb-4">
-          <Lock className="w-8 h-8" aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-bold text-[#172033]">Topik Masih Terkunci</h1>
-        <p className="mt-3 text-sm text-[#475569] leading-relaxed max-w-sm mx-auto">
-          {topicId === 't2'
-            ? 'Selesaikan seluruh bagian di Topik 1 terlebih dahulu untuk membuka topik ini.'
-            : 'Selesaikan seluruh bagian di Topik 1 dan Topik 2 terlebih dahulu untuk membuka topik ini.'}
-        </p>
-        <Link to="/materi" className="mt-8 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-[#C2410C] text-white font-semibold text-sm">
-          <ArrowLeft className="w-4 h-4" aria-hidden="true" />
-          <span>Kembali ke Daftar Topik</span>
-        </Link>
-      </div>
-    );
-  }
-
   const handleSectionClick = (sectionId: string) => {
-    const unlocked =
-      isTeacher || isSectionUnlocked(topicId as TopicId, sectionId, visited);
-    if (unlocked) {
-      setSearchParams({ s: sectionId });
-      setSidebarOpen(false);
-    }
+    setSearchParams({ s: sectionId });
+    setSidebarOpen(false);
   };
 
   const handleNextSection = () => {
@@ -345,9 +300,6 @@ export function MateriDetailPage() {
               <SectionNavList
                 sections={topicSections}
                 activeSection={activeSection}
-                topicId={topicId as TopicId}
-                visited={visited}
-                isTeacher={isTeacher}
                 onSelect={handleSectionClick}
                 isSectionRead={isSectionRead}
               />
@@ -390,9 +342,6 @@ export function MateriDetailPage() {
             <SectionNavList
               sections={topicSections}
               activeSection={activeSection}
-              topicId={topicId as TopicId}
-              visited={visited}
-              isTeacher={isTeacher}
               onSelect={handleSectionClick}
               isSectionRead={isSectionRead}
             />
@@ -473,7 +422,7 @@ export function MateriDetailPage() {
               </div>
             ) : (
               <div className="text-xs text-[#C2410C] font-semibold bg-[#FFEDD5] px-4 py-2 rounded-xl border border-[#F97316]/30">
-                Baca semua bagian sebelumnya terlebih dahulu
+                Bagian lain dapat dibuka kapan saja melalui daftar materi
               </div>
             )}
           </div>
@@ -489,9 +438,6 @@ export function MateriDetailPage() {
 interface SectionNavListProps {
   sections: { id: string; title: string; order: number }[];
   activeSection: { id: string } | null | undefined;
-  topicId: TopicId;
-  visited: string[];
-  isTeacher: boolean;
   onSelect: (id: string) => void;
   isSectionRead: (id: string) => boolean;
 }
@@ -499,9 +445,6 @@ interface SectionNavListProps {
 function SectionNavList({
   sections,
   activeSection,
-  topicId,
-  visited,
-  isTeacher,
   onSelect,
   isSectionRead,
 }: SectionNavListProps) {
@@ -509,23 +452,18 @@ function SectionNavList({
     <>
       {sections.map((sec, index) => {
         const isSelected = activeSection?.id === sec.id;
-        const unlocked = isTeacher || isSectionUnlocked(topicId, sec.id, visited);
         const read = isSectionRead(sec.id);
 
         return (
           <button
             key={sec.id}
             type="button"
-            disabled={!unlocked}
             onClick={() => onSelect(sec.id)}
-            title={!unlocked ? 'Selesaikan bagian sebelumnya terlebih dahulu' : sec.title}
             className={`w-full text-left p-3 rounded-xl border text-xs sm:text-sm transition-all duration-150 flex items-start gap-2.5
               ${
                 isSelected
                   ? 'bg-[#FFEDD5] border-[#F97316]/40 text-[#C2410C] font-bold shadow-xs'
-                  : unlocked
-                  ? 'bg-white border-[#F1E5D8] text-[#475569] hover:bg-orange-50/50 hover:text-[#172033] cursor-pointer'
-                  : 'bg-slate-50 border-slate-200 text-slate-400 cursor-not-allowed opacity-70'
+                  : 'bg-white border-[#F1E5D8] text-[#475569] hover:bg-orange-50/50 hover:text-[#172033] cursor-pointer'
               }`}
           >
             {/* Nomor / Status icon */}
@@ -536,15 +474,11 @@ function SectionNavList({
                     ? 'bg-[#C2410C] text-white'
                     : read
                     ? 'bg-green-100 text-[#15803D] border border-green-200'
-                    : unlocked
-                    ? 'bg-[#FFF8F0] text-[#64748B] border border-[#F1E5D8]'
-                    : 'bg-slate-200 text-slate-400'
+                    : 'bg-[#FFF8F0] text-[#64748B] border border-[#F1E5D8]'
                 }`}
             >
               {read && !isSelected ? (
                 <CheckCircle2 className="w-3.5 h-3.5" aria-hidden="true" />
-              ) : !unlocked ? (
-                <Lock className="w-3 h-3" aria-hidden="true" />
               ) : (
                 index + 1
               )}
@@ -553,9 +487,6 @@ function SectionNavList({
             {/* Judul bagian */}
             <div className="flex-1 min-w-0 leading-snug">
               <div className="truncate">{sec.title}</div>
-              {!unlocked && (
-                <div className="text-[10px] text-slate-400 mt-0.5">Terkunci</div>
-              )}
             </div>
           </button>
         );

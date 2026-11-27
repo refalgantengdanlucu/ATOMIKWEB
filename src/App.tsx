@@ -1,6 +1,6 @@
-import { HashRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { HashRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
-import { AccessGate } from './components/AccessGate';
+import { AccessGate, LoginRequiredGate } from './components/AccessGate';
 import { AccessProvider, } from './components/AccessProvider';
 import { useAccess } from './lib/access-context';
 import { HomePage } from './pages/HomePage';
@@ -11,6 +11,7 @@ import { QuizListPage } from './pages/QuizListPage';
 import { QuizSessionPage } from './pages/QuizSessionPage';
 import { ProgressPage } from './pages/ProgressPage';
 import { ClassroomToolsPage } from './pages/ClassroomToolsPage';
+import { PresencePage } from './pages/PresencePage';
 import { EssayExercisePage } from './pages/EssayExercisePage';
 import { NotFoundPage } from './pages/NotFoundPage';
 import { AuthPage } from './pages/AuthPage';
@@ -26,7 +27,6 @@ export default function App() {
           <Route path="/forgot-password" element={<AuthPage />} />
           <Route path="/reset-password" element={<AuthPage />} />
           <Route path="/panel-guru/*" element={<PanelGuruRoute />} />
-          {/* Landing Page Publik ATOMIKA (dapat diakses sebelum login) */}
           <Route
             path="/"
             element={
@@ -44,7 +44,20 @@ export default function App() {
 
 function DashboardRedirect() {
   const { profile } = useAccess();
-  return <Navigate to={profile?.role === 'teacher' ? '/kelas' : '/materi'} replace />;
+  return <Navigate to={profile?.role === 'teacher' ? '/panel-guru' : '/materi'} replace />;
+}
+
+function LegacyClassroomRoute() {
+  const location = useLocation();
+  const activity = new URLSearchParams(location.search).get('aktivitas');
+  if (!activity || activity === 'attendance') {
+    return <Navigate to="/presensi" replace />;
+  }
+  return (
+    <LoginRequiredGate>
+      <ClassroomToolsPage />
+    </LoginRequiredGate>
+  );
 }
 
 function ProtectedApp() {
@@ -61,10 +74,11 @@ function ProtectedApp() {
           <Route path="/lab/:mode" element={<LaboratoriumPage />} />
           <Route path="/kuis" element={<QuizListPage />} />
           <Route path="/kuis/:topicId" element={<QuizSessionPage />} />
-          <Route path="/progres" element={<ProgressPage />} />
-          <Route path="/kelas" element={<ClassroomToolsPage />} />
-          <Route path="/dashboard" element={<DashboardRedirect />} />
-          <Route path="/guru" element={<Navigate to="/kelas" replace />} />
+          <Route path="/progres" element={<LoginRequiredGate><ProgressPage /></LoginRequiredGate>} />
+          <Route path="/presensi" element={<LoginRequiredGate><PresencePage /></LoginRequiredGate>} />
+          <Route path="/kelas" element={<LegacyClassroomRoute />} />
+          <Route path="/dashboard" element={<LoginRequiredGate><DashboardRedirect /></LoginRequiredGate>} />
+          <Route path="/guru" element={<Navigate to="/panel-guru" replace />} />
           <Route path="*" element={<NotFoundPage />} />
         </Routes>
       </Layout>

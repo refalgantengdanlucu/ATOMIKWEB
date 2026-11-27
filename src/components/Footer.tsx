@@ -65,8 +65,8 @@ export function Footer() {
                   </Link>
                 </li>
                 <li>
-                  <Link to="/kelas" className="hover:text-[#C2410C] transition-colors">
-                    Kegiatan Kelas
+                  <Link to="/presensi" className="hover:text-[#C2410C] transition-colors">
+                    Presensi
                   </Link>
                 </li>
                 <li>

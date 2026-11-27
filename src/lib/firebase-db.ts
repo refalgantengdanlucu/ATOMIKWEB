@@ -1,5 +1,6 @@
 import {
   collection,
+  collectionGroup,
   doc,
   getDoc,
   setDoc,
@@ -8,10 +9,117 @@ import {
   limit,
   serverTimestamp,
   where,
+  type Timestamp,
 } from 'firebase/firestore';
 import { auth, db, isFirebaseConfigured } from './firebase';
 import { DEFAULT_INSTITUTION_ID, isValidInstitutionId } from './access-context';
+import type { AccessProfile } from './access-context';
 import type { StudentActivity, TrackedQuizResult } from './classroom';
+
+export interface FirestoreAttendanceRecord {
+  uid: string;
+  institutionId: string;
+  name: string;
+  className: string;
+  status: 'hadir';
+  attendedAt: Timestamp;
+}
+
+export interface JakartaDateParts {
+  year: number;
+  month: number;
+  day: number;
+  dateKey: string;
+}
+
+export function getJakartaDateParts(date: Date = new Date()): JakartaDateParts {
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: 'Asia/Jakarta',
+    year: 'numeric',
+    month: 'numeric',
+    day: 'numeric',
+  }).formatToParts(date);
+  const values = Object.fromEntries(parts.map(({ type, value }) => [type, value]));
+  const year = Number(values.year);
+  const month = Number(values.month);
+  const day = Number(values.day);
+  return {
+    year,
+    month,
+    day,
+    dateKey: `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`,
+  };
+}
+
+export async function submitStudentAttendance(profile: AccessProfile): Promise<void> {
+  if (!db || !isFirebaseConfigured) {
+    throw new Error('Firestore belum dikonfigurasi untuk menyimpan presensi.');
+  }
+  if (profile.role !== 'student') {
+    throw new Error('Presensi hanya tersedia untuk akun murid.');
+  }
+  if (!auth?.currentUser || auth.currentUser.uid !== profile.uid) {
+    throw new Error('Sesi Firebase tidak cocok dengan akun murid.');
+  }
+
+  const profileSnapshot = await getDoc(doc(db, 'profiles', profile.uid));
+  const savedProfile = profileSnapshot.data();
+  if (
+    !profileSnapshot.exists() ||
+    !isValidInstitutionId(savedProfile?.institutionId) ||
+    savedProfile?.name !== profile.name ||
+    typeof savedProfile?.className !== 'string'
+  ) {
+    throw new Error('Profil murid belum ditetapkan dengan benar oleh administrator.');
+  }
+
+  const date = getJakartaDateParts();
+  const recordRef = doc(
+    db,
+    'attendance',
+    profile.uid,
+    'years',
+    String(date.year),
+    'months',
+    String(date.month),
+    'days',
+    String(date.day),
+  );
+  const existing = await getDoc(recordRef);
+  if (existing.exists()) {
+    throw new Error('Presensi hari ini sudah tercatat.');
+  }
+
+  await setDoc(recordRef, {
+    uid: profile.uid,
+    institutionId: savedProfile.institutionId,
+    name: savedProfile.name,
+    className: savedProfile.className,
+    status: 'hadir',
+    attendedAt: serverTimestamp(),
+  });
+}
+
+export function subscribeAttendanceHistory(
+  uid: string,
+  callback: (records: FirestoreAttendanceRecord[]) => void,
+  onError: (error: Error) => void,
+): () => void {
+  if (!db || !isFirebaseConfigured) {
+    throw new Error('Firestore belum dikonfigurasi untuk menampilkan riwayat presensi.');
+  }
+  const q = query(collectionGroup(db, 'days'), where('uid', '==', uid), limit(100));
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const records = snapshot.docs
+        .map((item) => item.data() as FirestoreAttendanceRecord)
+        .sort((a, b) => b.attendedAt.toMillis() - a.attendedAt.toMillis());
+      callback(records);
+    },
+    onError,
+  );
+}
 
 /**
  * Menyimpan aktivitas siswa ke koleksi 'student_activities'.

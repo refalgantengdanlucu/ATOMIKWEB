@@ -1,5 +1,5 @@
 import { useCallback, useEffect, type ReactNode } from 'react';
-import { Link, Navigate, useLocation } from 'react-router-dom';
+import { Link, useLocation } from 'react-router-dom';
 import { LockKeyhole } from 'lucide-react';
 import { useAccess, DEFAULT_INSTITUTION_ID } from '../lib/access-context';
 import { CLASSROOM_STORAGE_KEYS, getStudentActivityKey, getUserClassroomStorageKey, readClassroomData, writeClassroomData } from '../lib/classroom';
@@ -9,88 +9,70 @@ import { TOPICS } from '../data/topics';
 import { SECTIONS } from '../data/sections';
 import type { AccessProfile } from '../lib/access-context';
 import { recordActivityForKey, useProgress } from '../lib/progress';
-import type { TopicId } from '../types';
 import { SkeletonBlock } from './Skeleton';
 
 export function AccessGate({ children }: { children: ReactNode }) {
-  const { profile, status } = useAccess();
-  const {
-    isLaboratoryUnlocked,
-    areQuizzesUnlocked,
-    isQuizUnlocked,
-  } = useProgress();
-  const location = useLocation();
-
-  if (status === 'loading') {
-    return (
-      <main className="flex min-h-screen items-center justify-center bg-[#FFF8F0] px-4" aria-live="polite" aria-busy="true">
-        <section className="w-full max-w-md rounded-3xl border border-[#F1E5D8] bg-white p-6 shadow-sm sm:p-9" role="status">
-          <span className="sr-only">Memulihkan sesi...</span>
-          <div className="mb-5 flex items-center gap-3">
-            <SkeletonBlock className="h-12 w-12 shrink-0 rounded-xl" />
-            <div className="flex-1 space-y-2">
-              <SkeletonBlock className="h-5 w-36 rounded" />
-              <SkeletonBlock className="h-3 w-48 max-w-full rounded" />
-            </div>
-          </div>
-          <SkeletonBlock className="mb-3 h-6 w-3/4 rounded" />
-          <SkeletonBlock className="mb-2 h-4 w-full rounded" />
-          <SkeletonBlock className="mb-6 h-4 w-5/6 rounded" />
-          <SkeletonBlock className="h-11 w-44 rounded-xl" />
-        </section>
-      </main>
-    );
-  }
-
-  if (!profile) {
-    return <Navigate to="/login" replace state={{ from: `${location.pathname}${location.search}` }} />;
-  }
-
-  const isStudent = profile.role === 'student';
-  const isLaboratoryRoute = location.pathname.startsWith('/laboratorium') || location.pathname.startsWith('/lab');
-  const isQuizRoute = location.pathname.startsWith('/kuis');
-  const quizTopicId = location.pathname.match(/^\/kuis\/(t[123])$/)?.[1] as TopicId | undefined;
-  const blockedMessage = !isStudent
-    ? undefined
-    : isLaboratoryRoute && !isLaboratoryUnlocked()
-      ? 'Selesaikan seluruh bagian materi Topik 1, 2, dan 3 untuk membuka Laboratorium.'
-      : isQuizRoute && !areQuizzesUnlocked()
-        ? 'Buka ketiga mode Laboratorium setelah menyelesaikan seluruh materi untuk membuka Kuis.'
-        : quizTopicId && !isQuizUnlocked(quizTopicId)
-          ? `Selesaikan kuis sebelumnya secara berurutan untuk membuka Kuis ${quizTopicId.slice(1)}.`
-          : undefined;
-
-  if (blockedMessage) {
-    return (
-      <>
-        <StudentActivityReporter profile={profile} blocked />
-        <main className="flex min-h-screen items-center justify-center bg-[#FFF8F0] px-4 py-10 text-[#172033]">
-          <section className="w-full max-w-xl rounded-3xl border border-[#F1E5D8] bg-white p-6 text-center shadow-sm sm:p-9">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-[#C2410C]">
-              <LockKeyhole className="h-7 w-7" aria-hidden="true" />
-            </div>
-            <h1 className="text-2xl font-extrabold">Selesaikan tahap sebelumnya</h1>
-            <p className="mt-2 text-sm leading-6 text-[#475569]">{blockedMessage}</p>
-            <Link to="/progres" className="mt-6 inline-flex min-h-12 items-center justify-center rounded-xl bg-[#C2410C] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#9A3412]">
-              Lihat roadmap progres
-            </Link>
-          </section>
-        </main>
-      </>
-    );
-  }
+  const { profile } = useAccess();
 
   return (
     <>
-      <StudentActivityReporter profile={profile} />
+      {profile && <StudentActivityReporter profile={profile} />}
       {children}
     </>
   );
 }
 
-export function StudentActivityReporter({ profile, blocked = false }: { profile: AccessProfile; blocked?: boolean }) {
+export function LoginRequiredGate({ children }: { children: ReactNode }) {
+  const { profile, status } = useAccess();
   const location = useLocation();
-  const { progress, storageKey, markAsRead } = useProgress({ uid: profile.uid });
+
+  if (status === 'loading') {
+    return (
+      <section className="mx-auto max-w-md rounded-3xl border border-[#F1E5D8] bg-white p-6 shadow-sm sm:p-9" role="status" aria-live="polite" aria-busy="true">
+        <span className="sr-only">Memulihkan sesi...</span>
+        <div className="mb-5 flex items-center gap-3">
+          <SkeletonBlock className="h-12 w-12 shrink-0 rounded-xl" />
+          <div className="flex-1 space-y-2">
+            <SkeletonBlock className="h-5 w-36 rounded" />
+            <SkeletonBlock className="h-3 w-48 max-w-full rounded" />
+          </div>
+        </div>
+        <SkeletonBlock className="mb-3 h-6 w-3/4 rounded" />
+        <SkeletonBlock className="mb-2 h-4 w-full rounded" />
+        <SkeletonBlock className="h-11 w-32 rounded-xl" />
+      </section>
+    );
+  }
+
+  if (!profile) {
+    return (
+      <main className="flex min-h-[55vh] items-center justify-center py-10 text-[#172033]">
+        <section className="w-full max-w-xl rounded-3xl border border-[#F1E5D8] bg-white p-6 text-center shadow-sm sm:p-9">
+          <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-orange-100 text-[#C2410C]">
+            <LockKeyhole className="h-7 w-7" aria-hidden="true" />
+          </div>
+          <h1 className="text-2xl font-extrabold">Masuk untuk melanjutkan</h1>
+          <p className="mt-2 text-sm leading-6 text-[#475569]">
+            Silakan masuk ke akun ATOMIKA untuk melihat progres belajar dan melakukan presensi.
+          </p>
+          <Link
+            to="/login"
+            state={{ from: `${location.pathname}${location.search}` }}
+            className="mt-6 inline-flex min-h-12 items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-5 py-3 text-sm font-bold text-white transition-colors hover:bg-[#9A3412]"
+          >
+            Masuk
+          </Link>
+        </section>
+      </main>
+    );
+  }
+
+  return children;
+}
+
+export function StudentActivityReporter({ profile }: { profile: AccessProfile }) {
+  const location = useLocation();
+  const { storageKey } = useProgress({ uid: profile.uid });
 
   const reportActivity = useCallback((sectionId?: string) => {
     if (profile.role !== 'student') return;
@@ -106,10 +88,12 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
           ? `Laboratorium · ${labMode === 'partikel' ? 'Lab Partikel' : labMode === 'kalkulator' ? 'Kalkulator Partikel' : 'Simulator Ion'}`
           : quiz
             ? `Evaluasi · Kuis ${quiz.toUpperCase()}`
+            : location.pathname === '/presensi'
+              ? 'Presensi'
             : location.pathname === '/kelas'
               ? location.search.startsWith('?aktivitas=') ? 'Kegiatan kelas · ' + location.search.slice(11) : 'Kegiatan kelas'
               : 'Beranda';
-    const currentActivity = blocked ? `${activity} · akses terkunci` : activity;
+    const currentActivity = activity;
 
     const visitKey = `atomika-student-visits-v1:${profile.uid}`;
     let visitedSectionIds: string[] = [];
@@ -155,7 +139,7 @@ export function StudentActivityReporter({ profile, blocked = false }: { profile:
     void saveStudentActivity(record).catch((error: unknown) => {
       console.error('Gagal mengirim aktivitas siswa ke Firestore:', error);
     });
-  }, [blocked, location.pathname, location.search, markAsRead, profile, progress.visitedSectionIds, storageKey]);
+  }, [location.pathname, location.search, profile, storageKey]);
 
   useEffect(() => {
     reportActivity();

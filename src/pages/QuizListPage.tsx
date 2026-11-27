@@ -1,13 +1,10 @@
 import { Link } from 'react-router-dom';
 import { TOPICS } from '../data/topics';
-import { HelpCircle, Award, CheckCircle2, ArrowRight, Lock } from 'lucide-react';
+import { HelpCircle, Award, CheckCircle2, ArrowRight } from 'lucide-react';
 import { useProgress } from '../lib/progress';
-import { useAccess } from '../lib/access-context';
 
 export function QuizListPage() {
-  const { progress, isQuizUnlocked, areQuizzesUnlocked } = useProgress();
-  const { profile } = useAccess();
-  const isTeacher = profile?.role === 'teacher';
+  const { progress } = useProgress();
 
   return (
     <div className="space-y-8 pb-16">
@@ -20,8 +17,7 @@ export function QuizListPage() {
           Kuis Berumpan Balik
         </h1>
         <p className="mt-2 text-[#475569] text-base max-w-2xl">
-          Selesaikan kuis secara berurutan. Paket berikutnya terbuka setelah kuis sebelumnya dikirim.
-          Nilai terakhir dan terbaik tersimpan di progres belajar.
+          Pilih paket kuis mana pun untuk mulai. Nilai terakhir dan terbaik tersimpan di progres belajar.
         </p>
       </div>
 
@@ -48,31 +44,23 @@ export function QuizListPage() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {TOPICS.map((topic, index) => {
-          const unlocked = isTeacher || isQuizUnlocked(topic.id);
           const result = progress.quizResults[topic.id];
           const completed = (result?.attempts ?? 0) > 0;
-          const lockedMessage = !isTeacher && !areQuizzesUnlocked()
-            ? 'Selesaikan semua mode Laboratorium terlebih dahulu.'
-            : `Kirim Kuis ${index} untuk membuka paket ini.`;
 
           return (
             <div
               key={topic.id}
-              data-card-hover={unlocked ? '' : undefined}
-              className={`flex flex-col justify-between p-6 rounded-2xl border shadow-xs transition-shadow ${
-                unlocked ? 'bg-white border-[#F1E5D8]' : 'bg-slate-50 border-slate-200 opacity-85'
-              }`}
+              data-card-hover
+              className="flex flex-col justify-between rounded-2xl border border-[#F1E5D8] bg-white p-6 shadow-xs transition-shadow"
             >
               <div>
                 <div className="flex items-center justify-between mb-3">
-                  <span className={`text-xs font-bold px-2.5 py-0.5 rounded-full ${
-                    unlocked ? 'text-[#C2410C] bg-[#FFEDD5]' : 'text-slate-500 bg-slate-100'
-                  }`}>
-                    {unlocked ? `Paket ${index + 1}` : 'Terkunci'}
+                  <span className="rounded-full bg-[#FFEDD5] px-2.5 py-0.5 text-xs font-bold text-[#C2410C]">
+                    Paket {index + 1}
                   </span>
                   <span className="text-xs text-[#64748B]">5 Soal</span>
                 </div>
-                <h3 className={`font-bold text-lg mb-2 ${unlocked ? 'text-[#172033]' : 'text-slate-500'}`}>
+                <h3 className="mb-2 text-lg font-bold text-[#172033]">
                   {topic.title}
                 </h3>
                 <p className="text-xs text-[#475569] leading-relaxed mb-4">{topic.description}</p>
@@ -93,32 +81,15 @@ export function QuizListPage() {
                     Nilai terakhir: {result?.lastScore}% · Terbaik: {result?.bestScore}% ({result?.attempts} percobaan)
                   </p>
                 )}
-                {!unlocked && (
-                  <p className="mt-4 flex items-center gap-2 rounded-lg bg-slate-100 px-3 py-2 text-xs text-slate-600">
-                    <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-                    {lockedMessage}
-                  </p>
-                )}
               </div>
 
-              {unlocked ? (
-                <Link
-                  to={`/kuis/${topic.id}`}
-                  className="mt-6 inline-flex items-center justify-center gap-2 w-full py-2.5 px-4 rounded-xl bg-[#C2410C] hover:bg-[#9A3412] text-white font-semibold text-sm shadow-sm transition-colors min-h-[44px]"
-                >
-                  <span>{completed ? `Ulangi Paket ${index + 1}` : `Mulai Paket ${index + 1}`}</span>
-                  <ArrowRight className="w-4 h-4" aria-hidden="true" />
-                </Link>
-              ) : (
-                <button
-                  type="button"
-                  disabled
-                  className="mt-6 inline-flex min-h-[44px] w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-slate-200 bg-slate-100 px-4 py-2.5 text-sm font-semibold text-slate-400"
-                >
-                  <Lock className="h-4 w-4" aria-hidden="true" />
-                  Terkunci
-                </button>
-              )}
+              <Link
+                to={`/kuis/${topic.id}`}
+                className="mt-6 inline-flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl bg-[#C2410C] px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[#9A3412]"
+              >
+                <span>{completed ? `Ulangi Paket ${index + 1}` : `Mulai Paket ${index + 1}`}</span>
+                <ArrowRight className="w-4 h-4" aria-hidden="true" />
+              </Link>
             </div>
           );
         })}

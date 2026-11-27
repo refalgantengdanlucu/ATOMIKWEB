@@ -7,6 +7,7 @@ import {
   initializeTestEnvironment,
 } from '@firebase/rules-unit-testing';
 import {
+  collectionGroup,
   collection,
   doc,
   getDoc,
@@ -61,6 +62,27 @@ const quizAttempt = (uid, institutionId, id) => ({
   serverReceivedAt: serverTimestamp(),
 });
 
+const jakartaDateParts = () => {
+  const shifted = new Date(Date.now() + 7 * 60 * 60 * 1000);
+  return {
+    year: String(shifted.getUTCFullYear()),
+    month: String(shifted.getUTCMonth() + 1),
+    day: String(shifted.getUTCDate()),
+  };
+};
+
+const attendanceRef = (firestore, uid, date = jakartaDateParts()) =>
+  doc(firestore, 'attendance', uid, 'years', date.year, 'months', date.month, 'days', date.day);
+
+const attendanceRecord = (uid, institutionId) => ({
+  uid,
+  institutionId,
+  name: `Siswa ${uid}`,
+  className: 'X-1',
+  status: 'hadir',
+  attendedAt: serverTimestamp(),
+});
+
 before(async () => {
   testEnvironment = await initializeTestEnvironment({
     projectId,
@@ -99,6 +121,7 @@ test('unauthenticated users cannot read student records', async () => {
   await assertFails(getDoc(doc(firestore, 'profiles/student-a')));
   await assertFails(getDoc(doc(firestore, 'student_activities/student-b')));
   await assertFails(getDoc(doc(firestore, 'quiz_attempts/attempt-b')));
+  await assertFails(getDoc(attendanceRef(firestore, 'student-a')));
 });
 
 test('a student can create only their own activity and quiz attempt', async () => {
@@ -152,4 +175,55 @@ test('quiz payload identity must match the authenticated student profile', async
 
   const wrongInstitution = quizAttempt('student-a', institutionB, 'wrong-institution');
   await assertFails(setDoc(doc(firestore, 'quiz_attempts/wrong-institution'), wrongInstitution));
+});
+
+test('a student can create only their own daily attendance record once', async () => {
+  const firestore = testEnvironment.authenticatedContext('student-a').firestore();
+  const ownRecord = attendanceRef(firestore, 'student-a');
+  const missingRecord = await assertSucceeds(getDoc(ownRecord));
+  assert.equal(missingRecord.exists(), false);
+  await assertSucceeds(setDoc(ownRecord, attendanceRecord('student-a', institutionA)));
+  await assertFails(setDoc(ownRecord, attendanceRecord('student-a', institutionA)));
+  const wrongDate = jakartaDateParts();
+  wrongDate.day = wrongDate.day === '1' ? '2' : '1';
+  await assertFails(setDoc(
+    attendanceRef(firestore, 'student-a', wrongDate),
+    attendanceRecord('student-a', institutionA),
+  ));
+  await assertFails(setDoc(
+    attendanceRef(firestore, 'student-b'),
+    attendanceRecord('student-b', institutionA),
+  ));
+  await assertFails(getDoc(attendanceRef(firestore, 'student-b')));
+});
+
+test('attendance reads are limited to the owner or their institution teacher', async () => {
+  const recordDate = jakartaDateParts();
+  const recordPath = attendanceRef(
+    testEnvironment.authenticatedContext('student-a').firestore(),
+    'student-a',
+    recordDate,
+  );
+  await testEnvironment.withSecurityRulesDisabled(async () => {
+    await setDoc(recordPath, {
+      ...attendanceRecord('student-a', institutionA),
+      attendedAt: new Date(),
+    });
+  });
+
+  const owner = testEnvironment.authenticatedContext('student-a').firestore();
+  const sameInstitutionTeacher = testEnvironment.authenticatedContext('teacher-a').firestore();
+  const otherTeacher = testEnvironment.authenticatedContext('teacher-b').firestore();
+  await assertSucceeds(getDoc(attendanceRef(owner, 'student-a', recordDate)));
+  const ownHistory = await assertSucceeds(getDocs(query(
+    collectionGroup(owner, 'days'),
+    where('uid', '==', 'student-a'),
+  )));
+  assert.equal(ownHistory.size, 1);
+  await assertFails(getDocs(query(
+    collectionGroup(otherTeacher, 'days'),
+    where('uid', '==', 'student-a'),
+  )));
+  await assertSucceeds(getDoc(attendanceRef(sameInstitutionTeacher, 'student-a', recordDate)));
+  await assertFails(getDoc(attendanceRef(otherTeacher, 'student-a', recordDate)));
 });

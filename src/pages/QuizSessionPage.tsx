@@ -2,12 +2,12 @@ import { useEffect, useMemo, useState } from 'react';
 import { Link, useParams } from 'react-router-dom';
 import {
   AlertCircle, ArrowLeft, ArrowRight, CheckCircle2, Clock3, HelpCircle,
-  Lock, RotateCcw, Send, UserRound, X,
+  RotateCcw, Send, UserRound, X,
 } from 'lucide-react';
 import { TOPICS } from '../data/topics';
 import { QUIZ_QUESTIONS } from '../data/quizQuestions';
 import { useAccess, DEFAULT_INSTITUTION_ID } from '../lib/access-context';
-import { isTopicCompleted, saveProgressForKey, getProgressForKey, useProgress } from '../lib/progress';
+import { saveProgressForKey, getProgressForKey, useProgress } from '../lib/progress';
 import { readJsonStorage, writeJsonStorage } from '../lib/safe-storage';
 import { calculateQuizScore, createAttemptId, type QuizAttemptRecord } from '../lib/quiz-attempt';
 import { saveTopicQuizAttempt } from '../panel-guru/quizAttempts';
@@ -46,8 +46,7 @@ function writeSession(storageKey: string, topicId: TopicId, session: SavedQuizSe
 export function QuizSessionPage() {
   const { topicId } = useParams<{ topicId: string }>();
   const topic = TOPICS.find((item) => item.id === topicId);
-  const { profile } = useAccess();
-  const { progress, storageKey } = useProgress();
+  const { storageKey } = useProgress();
 
   if (!topic) {
     return (
@@ -59,25 +58,6 @@ export function QuizSessionPage() {
         <p className="mt-2 text-sm text-[#475569]">Paket kuis "{topicId}" tidak tersedia.</p>
         <Link to="/kuis" className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-semibold text-white">
           <ArrowLeft className="h-4 w-4" /> Daftar Kuis
-        </Link>
-      </div>
-    );
-  }
-
-  const isTeacher = profile?.role === 'teacher';
-  const isUnlocked = isTeacher || isTopicCompleted(topic.id as TopicId, progress.visitedSectionIds);
-  if (!isUnlocked) {
-    return (
-      <div className="mx-auto max-w-lg py-16 text-center">
-        <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-amber-100 text-[#C2410C]">
-          <Lock className="h-7 w-7" aria-hidden="true" />
-        </div>
-        <h1 className="text-2xl font-bold text-[#172033]">Paket Kuis Masih Terkunci</h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-[#475569]">
-          Kamu perlu menyelesaikan seluruh bagian materi <strong>{topic.title}</strong> terlebih dahulu.
-        </p>
-        <Link to={`/materi/${topic.id}`} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[#C2410C] px-5 py-2.5 text-sm font-semibold text-white">
-          Buka Materi <ArrowRight className="h-4 w-4" />
         </Link>
       </div>
     );

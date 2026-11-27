@@ -5,20 +5,12 @@ import { SECTIONS } from '../data/sections';
 import { TopicCard } from '../components/TopicCard';
 import { Search, BookOpen, X, ArrowRight, Sparkles } from 'lucide-react';
 import { useProgress } from '../lib/progress';
-import { useAccess } from '../lib/access-context';
 import type { TopicId, TopicStatus } from '../types';
 
 export function MateriPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const { progress, isTopicUnlocked, isSectionUnlocked, getTopicCompletion } = useProgress();
-  const { profile } = useAccess();
+  const { progress, getTopicCompletion } = useProgress();
   const visited = progress.visitedSectionIds;
-  const canOpenTopic = (topicId: TopicId) =>
-    profile?.role === 'teacher' ||
-    isTopicUnlocked(topicId);
-  const canOpenSection = (topicId: TopicId, sectionId: string) =>
-    profile?.role === 'teacher' ||
-    isSectionUnlocked(topicId, sectionId);
 
   // Algoritma pencarian berbobot sisi klien (PRD Bagian 7.1)
   const searchResults = useMemo(() => {
@@ -63,17 +55,6 @@ export function MateriPage() {
     return 'not_started';
   };
 
-  /** Pesan kunci per topik */
-  const getLockedMessage = (topicId: TopicId): string => {
-    if (topicId === 't2') {
-      return 'Selesaikan seluruh bagian Topik 1 (Struktur Atom & Partikel Penyusunnya) terlebih dahulu.';
-    }
-    if (topicId === 't3') {
-      return 'Selesaikan seluruh bagian Topik 1 dan Topik 2 terlebih dahulu.';
-    }
-    return '';
-  };
-
   return (
     <div className="space-y-8 pb-16">
       {/* Header */}
@@ -86,8 +67,7 @@ export function MateriPage() {
           Buku Materi Pembelajaran
         </h1>
         <p className="mt-2 text-[#475569] text-base max-w-2xl">
-          Eksplorasi konsep struktur atom secara mendalam. Materi harus dibaca secara berurutan —
-          topik berikutnya terbuka setelah topik sebelumnya selesai dibaca.
+          Eksplorasi seluruh konsep struktur atom dan buka topik atau bagian mana pun sesuai kebutuhan.
         </p>
       </div>
 
@@ -141,46 +121,28 @@ export function MateriPage() {
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               {searchResults.map((sec) => {
                 const parentTopic = TOPICS.find((t) => t.id === sec.topicId);
-                const sectionUnlocked = canOpenSection(sec.topicId as TopicId, sec.id);
                 return (
                   <div key={sec.id} className="relative">
-                    {sectionUnlocked ? (
-                      <Link
-                        to={`/materi/${sec.topicId}?s=${sec.id}`}
-                        data-card-hover
-                        className="p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] shadow-xs transition-all flex flex-col justify-between group"
-                      >
-                        <div>
-                          <div className="flex items-center gap-1.5 text-xs text-[#C2410C] font-semibold mb-1">
-                            <Sparkles className="w-3 h-3 text-[#F97316]" />
-                            <span>{parentTopic?.title}</span>
-                          </div>
-                          <h3 className="font-bold text-base text-[#172033] group-hover:text-[#C2410C] transition-colors">
-                            {sec.title}
-                          </h3>
-                          <p className="text-xs text-[#475569] mt-2 line-clamp-2">
-                            {sec.body.replace(/[#*`>|]/g, '').trim()}
-                          </p>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-[#F1E5D8] text-xs font-semibold text-[#C2410C] flex items-center justify-between">
-                          <span>Buka Bagian Ini</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </div>
-                      </Link>
-                    ) : (
-                      <div className="p-5 rounded-2xl bg-slate-50 border border-slate-200 shadow-xs flex flex-col justify-between opacity-70">
-                        <div>
-                          <div className="flex items-center gap-1.5 text-xs text-slate-500 font-semibold mb-1">
-                            <Sparkles className="w-3 h-3 text-slate-400" />
-                            <span>{parentTopic?.title}</span>
-                          </div>
-                          <h3 className="font-bold text-base text-slate-500">{sec.title}</h3>
-                        </div>
-                        <div className="mt-4 pt-3 border-t border-slate-200 text-xs font-semibold text-slate-400 flex items-center gap-1.5">
-                          <span>🔒 Selesaikan topik sebelumnya dulu</span>
-                        </div>
+                    <Link
+                      to={`/materi/${sec.topicId}?s=${sec.id}`}
+                      data-card-hover
+                      className="p-5 rounded-2xl bg-white border border-[#F1E5D8] hover:border-[#F97316] shadow-xs transition-all flex flex-col justify-between group"
+                    >
+                      <div className="flex items-center gap-1.5 text-xs text-[#C2410C] font-semibold mb-1">
+                        <Sparkles className="w-3 h-3 text-[#F97316]" />
+                        <span>{parentTopic?.title}</span>
                       </div>
-                    )}
+                      <h3 className="font-bold text-base text-[#172033] group-hover:text-[#C2410C] transition-colors">
+                        {sec.title}
+                      </h3>
+                      <p className="text-xs text-[#475569] mt-2 line-clamp-2">
+                        {sec.body.replace(/[#*`>|]/g, '').trim()}
+                      </p>
+                      <div className="mt-4 pt-3 border-t border-[#F1E5D8] text-xs font-semibold text-[#C2410C] flex items-center justify-between">
+                        <span>Buka Bagian Ini</span>
+                        <ArrowRight className="w-3.5 h-3.5" />
+                      </div>
+                    </Link>
                   </div>
                 );
               })}
@@ -197,21 +159,16 @@ export function MateriPage() {
           )}
         </section>
       ) : (
-        /* Tiga Kartu Topik Utama dengan status kunci */
+        /* Tiga Kartu Topik Utama */
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-2">
           {TOPICS.map((topic) => {
-            const unlocked = canOpenTopic(topic.id as TopicId);
             const status = getTopicStatus(topic.id as TopicId);
-            const lockedMessage = unlocked
-              ? undefined
-              : getLockedMessage(topic.id as TopicId);
             return (
               <TopicCard
                 key={topic.id}
                 topic={topic}
-                unlocked={unlocked}
+                unlocked
                 status={status}
-                lockedMessage={lockedMessage}
               />
             );
           })}
@@ -227,7 +184,7 @@ export function MateriPage() {
           </div>
           <h2 className="text-lg font-bold text-[#172033]">Latihan Soal Essay Struktur Atom</h2>
           <p className="text-xs sm:text-sm text-[#475569] max-w-xl">
-            Tersedia 6 soal essay terbagi dalam 3 subtopik utama (Struktur & Partikel, Nomor Atom & Massa, serta Ion & Perubahan Elektron). Jawaban tersimpan di akun Anda dan dapat ditinjau oleh guru.
+            Tersedia 6 soal essay terbagi dalam 3 subtopik utama (Struktur & Partikel, Nomor Atom & Massa, serta Ion & Perubahan Elektron). Jawaban tersimpan di perangkat, atau di akun jika Anda sudah masuk.
           </p>
         </div>
         <Link
@@ -243,9 +200,8 @@ export function MateriPage() {
       <div className="p-4 rounded-2xl bg-[#FFF8F0] border border-[#F97316]/20 text-xs text-[#475569] flex items-start gap-2.5">
         <span className="text-base shrink-0">📖</span>
         <span>
-          <strong className="text-[#172033]">Cara Membaca:</strong> Buka setiap bagian secara
-          berurutan dari nomor 1. Topik berikutnya otomatis terbuka setelah semua bagian topik
-          sebelumnya selesai dibaca.{' '}
+          <strong className="text-[#172033]">Progres Bacaan:</strong> Buka bagian mana pun sesuai
+          kebutuhan. Progres akun atau perangkat ini mencatat bagian yang telah dibaca.{' '}
           <span className="font-semibold text-[#C2410C]">
             {visited.length} bagian telah dibaca
           </span>

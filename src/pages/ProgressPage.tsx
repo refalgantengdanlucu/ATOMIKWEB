@@ -232,7 +232,7 @@ export function ProgressPage() {
           <article className="flex flex-col justify-between rounded-2xl border border-[#F1E5D8] bg-white p-5 shadow-xs">
             <div>
               <span className="text-xs font-bold uppercase tracking-wide text-[#C2410C]">
-                Kegiatan Kelas
+                Kuis Penguatan
               </span>
               <h3 className="mt-1 font-bold leading-snug text-[#172033]">
                 Kuis Penguatan Struktur Atom

@@ -100,7 +100,7 @@ export async function saveEssayAnswer({
   writeJsonStorage(essayStorageKey(uid), localCache);
 
   // Simpan ke Firestore jika tersedia
-  if (db && isFirebaseConfigured) {
+  if (uid !== 'anonymous' && db && isFirebaseConfigured) {
     try {
       const essayDocRef = doc(db, 'essay_submissions', submissionId);
       await setDoc(
@@ -125,7 +125,7 @@ export async function saveEssayAnswer({
 export async function loadStudentEssayAnswers(uid: string): Promise<Record<string, EssaySubmission>> {
   const localCache = readJsonStorage<Record<string, EssaySubmission>>(essayStorageKey(uid), {}).value || {};
 
-  if (!db || !isFirebaseConfigured || !uid) {
+  if (!db || !isFirebaseConfigured || !uid || uid === 'anonymous') {
     return localCache;
   }
 

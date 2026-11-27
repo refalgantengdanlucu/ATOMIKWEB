@@ -1,9 +1,8 @@
 import { NavLink, useLocation, Link, useNavigate } from 'react-router-dom';
-import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, Users, LockKeyhole, LogOut, GraduationCap, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Home, BookOpen, Atom, HelpCircle, Award, Sparkles, ClipboardCheck, LogOut, GraduationCap, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useAccess } from '../lib/access-context';
-import { useProgress } from '../lib/progress';
 import { useTeacherAccess } from '../panel-guru/useTeacherAccess';
 
 interface NavbarProps {
@@ -30,10 +29,9 @@ const NAV_ITEMS: NavItem[] = [
   { to: '/kuis', label: 'Kuis', icon: HelpCircle },
   { to: '/progres', label: 'Progres', icon: Award },
   {
-    to: '/kelas',
-    label: 'Kegiatan Kelas',
-    icon: Users,
-    aliases: ['/guru', '/dashboard'],
+    to: '/presensi',
+    label: 'Presensi',
+    icon: ClipboardCheck,
   },
 ];
 
@@ -41,7 +39,6 @@ export function Navbar({ expanded, onToggle }: NavbarProps) {
   const location = useLocation();
   const navigate = useNavigate();
   const { profile, exit } = useAccess();
-  const { isLaboratoryUnlocked, areQuizzesUnlocked } = useProgress();
   const teacherAccess = useTeacherAccess();
   const [logoutError, setLogoutError] = useState('');
   const [logoutDialogOpen, setLogoutDialogOpen] = useState(false);
@@ -229,43 +226,7 @@ export function Navbar({ expanded, onToggle }: NavbarProps) {
           {navItems.map((item) => {
             const Icon = item.icon;
             const active = checkIsActive(item);
-            const isLocked = profile?.role === 'student' && (
-              (item.to === '/laboratorium' && !isLaboratoryUnlocked()) ||
-              (item.to === '/kuis' && !areQuizzesUnlocked())
-            );
-            const label = item.to === '/kelas' && profile?.role === 'teacher'
-              ? 'Dashboard Guru'
-              : item.label;
-
-            if (isLocked) {
-              return (
-                <span
-                  key={item.to}
-                  aria-disabled="true"
-                  title={item.to === '/laboratorium'
-                    ? 'Selesaikan semua materi Topik 1–3 untuk membuka laboratorium'
-                    : 'Selesaikan semua mode laboratorium untuk membuka kuis'}
-                  className={`group relative flex min-h-11 shrink-0 cursor-not-allowed items-center gap-3 rounded-full px-3 text-sm font-semibold text-orange-100/55 transition-colors ${
-                    expanded ? 'w-full' : 'justify-center lg:w-11 lg:px-0'
-                  } max-lg:w-11 max-lg:justify-center max-lg:px-0 ${
-                    expanded ? 'max-lg:w-full max-lg:justify-start max-lg:px-3' : ''
-                  }`}
-                >
-                  <LockKeyhole className="h-[18px] w-[18px] shrink-0" aria-hidden="true" />
-                  <span className={`truncate transition-[opacity,width] duration-200 ${expanded ? 'w-auto opacity-100' : 'w-0 overflow-hidden opacity-0'}`}>
-                    {label}
-                  </span>
-                  {!expanded && (
-                    <span
-                      aria-hidden="true"
-                      className="pointer-events-none absolute left-[calc(100%+0.75rem)] top-1/2 z-[60] -translate-x-1 -translate-y-1/2 whitespace-nowrap rounded-lg bg-[#172033] px-3 py-2 text-xs font-semibold text-white opacity-0 shadow-lg transition-[opacity,transform] duration-200 group-hover:translate-x-0 group-hover:opacity-100 group-focus-within:translate-x-0 group-focus-within:opacity-100 max-lg:hidden"
-                    >
-                      {label}
-                    </span>
-                  )}
-                </span>
-              );
-            }
+            const label = item.label;
 
             return (
               <NavLink

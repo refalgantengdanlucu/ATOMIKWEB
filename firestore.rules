@@ -147,6 +147,37 @@ service cloud.firestore {
         && data.serverReceivedAt == request.time;
     }
 
+    function validAttendance(data, uid, year, month, day) {
+      let jakartaTime = request.time + duration.value(7, 'h');
+      return hasAssignedProfile(uid)
+        && !exists(teacherPath(uid))
+        && year == jakartaTime.year().toString()
+        && month == jakartaTime.month().toString()
+        && day == jakartaTime.day().toString()
+        && data.keys().hasOnly([
+          'uid',
+          'institutionId',
+          'name',
+          'className',
+          'status',
+          'attendedAt'
+        ])
+        && data.keys().hasAll([
+          'uid',
+          'institutionId',
+          'name',
+          'className',
+          'status',
+          'attendedAt'
+        ])
+        && data.uid == uid
+        && data.institutionId == get(profilePath(uid)).data.institutionId
+        && data.name == get(profilePath(uid)).data.name
+        && data.className == get(profilePath(uid)).data.className
+        && data.status == 'hadir'
+        && data.attendedAt == request.time;
+    }
+
     match /profiles/{userId} {
       allow get: if isSignedIn() && request.auth.uid == userId;
       allow list: if false;
@@ -194,6 +225,18 @@ service cloud.firestore {
         || isTeacherFor(resource.data.institutionId);
       allow create: if isSignedIn()
         && validQuizAttempt(request.resource.data, attemptId);
+      allow update, delete: if false;
+    }
+
+    match /attendance/{userId}/years/{year}/months/{month}/days/{day} {
+      allow get: if isSignedIn()
+        && (request.auth.uid == userId || isTeacherFor(resource.data.institutionId));
+      allow list: if isSignedIn()
+        && ((request.auth.uid == userId && resource.data.uid == userId)
+          || isTeacherFor(resource.data.institutionId));
+      allow create: if isSignedIn()
+        && request.auth.uid == userId
+        && validAttendance(request.resource.data, userId, year, month, day);
       allow update, delete: if false;
     }
 

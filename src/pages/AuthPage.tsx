@@ -146,6 +146,7 @@ export function AuthPage() {
   const stateFrom = (location.state as { from?: unknown } | null)?.from;
   const queryFrom = new URLSearchParams(location.search).get('next');
   const returnTo = safeReturnPath(stateFrom ?? queryFrom);
+  const authReturnState = returnTo === '/' ? undefined : { from: returnTo };
   const queryRole = new URLSearchParams(location.search).get('role');
 
   const [name, setName] = useState('');
@@ -182,7 +183,7 @@ export function AuthPage() {
         returnTo && returnTo !== '/'
           ? returnTo
           : profile.role === 'teacher'
-            ? '/kelas'
+            ? '/panel-guru'
             : '/materi';
       navigate(dest, { replace: true });
     }
@@ -209,7 +210,7 @@ export function AuthPage() {
           institutionId: 'atomika-sma',
         });
       }
-      const dest = returnTo && returnTo !== '/' ? returnTo : '/kelas';
+      const dest = returnTo && returnTo !== '/' ? returnTo : '/panel-guru';
       navigate(dest, { replace: true });
     } catch (caught: unknown) {
       const message = caught instanceof Error ? caught.message : 'Sandi guru tidak sesuai';
@@ -656,10 +657,10 @@ export function AuthPage() {
             </form>
 
             {isLogin && (
-              <p className="auth-switch">Belum memiliki akun? <Link to="/register">Daftar Sekarang</Link></p>
+              <p className="auth-switch">Belum memiliki akun? <Link to="/register" state={authReturnState}>Daftar Sekarang</Link></p>
             )}
             {isRegister && (
-              <p className="auth-switch">Sudah memiliki akun? <Link to="/login">Login</Link></p>
+              <p className="auth-switch">Sudah memiliki akun? <Link to="/login" state={authReturnState}>Login</Link></p>
             )}
             {isForgot && <BackToLogin />}
             {isReset && (

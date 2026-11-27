@@ -46,19 +46,19 @@ npm run preview
 
 ## Login dan Alur Belajar Siswa
 
-Login wajib untuk membuka beranda maupun fitur belajar. Rute login, pendaftaran, dan pemulihan kata sandi tersedia tanpa sesi; sesudah login siswa kembali ke halaman yang diminta atau ke beranda. Tanpa konfigurasi Firebase, halaman login akan menampilkan variabel yang perlu disiapkan dan proses autentikasi tetap dinonaktifkan.
+Beranda, seluruh materi dan latihan essay, Laboratorium, serta semua paket Kuis dapat digunakan tanpa login. Progres anonim disimpan sementara di browser; progres akun tetap dipisahkan berdasarkan UID. Hanya menu Progres dan Presensi yang meminta login. Sesudah login, pengguna kembali ke halaman yang diminta. Tanpa konfigurasi Firebase, halaman login akan menampilkan variabel yang perlu disiapkan dan proses autentikasi tetap dinonaktifkan.
 
-Siswa membuka materi secara berurutan; seluruh bagian Topik 1–3 harus dibaca sebelum Laboratorium terbuka. Laboratorium memiliki tiga mode (Partikel, Kalkulator Partikel, dan Simulator Ion); setiap mode ditandai selesai saat dibuka. Setelah ketiga mode dibuka, Kuis 1 tersedia. Kuis berikutnya terbuka setelah kuis sebelumnya dikirim. Halaman **Progres** selalu dapat dibuka dan menampilkan status materi, lab, urutan kuis, serta nilai terakhir dan terbaik. Progres tersimpan lokal di browser/perangkat siswa.
+Materi, tiga mode Laboratorium (Partikel, Kalkulator Partikel, dan Simulator Ion), serta tiga paket kuis dapat dibuka dalam urutan bebas. Halaman **Progres** menampilkan status materi, lab, dan nilai kuis terakhir/terbaik setelah login.
 
-## Kegiatan Kelas
+## Presensi
 
-Halaman **Kegiatan Kelas** di `/kelas` menyediakan kuis klasifikasi reaksi, cek pemahaman, presensi, dan checklist progres laporan praktikum. Data fitur tersebut disimpan lokal per UID pada browser ini. Aktivitas belajar dan hasil kuis utama dapat disinkronkan ke Firestore setelah akun ditetapkan ke institusi oleh administrator.
+Halaman **Presensi** di `/presensi` menggunakan identitas akun dan menyimpan satu catatan per murid per hari ke Firestore. Waktu dibuat oleh Firestore, tanggal harian mengikuti zona WIB, dan aturan database membatasi catatan pada pemiliknya serta mencegah perubahan/penghapusan dan presensi ganda. Riwayat yang ditampilkan hanya milik akun murid. Firestore dan profil murid harus sudah dikonfigurasi serta ditetapkan ke institusi oleh administrator. Rute lama `/kelas?aktivitas=...` tetap tersedia untuk menjaga fitur/data kegiatan kelas yang telah ada; membuka `/kelas` tanpa aktivitas mengarah ke Presensi.
 
 Sinkronisasi Google Sheets sengaja dinonaktifkan. Endpoint Apps Script lama tidak memverifikasi identitas Firebase dan tidak aman untuk menerima atau menampilkan data siswa. `google-apps-script/Code.gs` kini menolak permintaan. Jika pernah ada deployment Web App sebelumnya, hapus deployment atau cabut akses publik di Apps Script; mengubah file source saja tidak menonaktifkan deployment lama.
 
 ## Autentikasi
 
-Login diwajibkan sebelum siswa dapat membuka beranda maupun halaman belajar. Jika pengguna belum login, tautan yang diminta disimpan dan dibuka setelah login berhasil. Halaman login, pendaftaran, dan pemulihan kata sandi tetap dapat diakses tanpa sesi.
+Autentikasi tetap aktif untuk data akun dan fungsi administrasi. Permintaan login dari Progres atau Presensi menyimpan tujuan awal agar pengguna kembali ke halaman tersebut sesudah autentikasi berhasil. Halaman login, pendaftaran, dan pemulihan kata sandi tetap dapat diakses tanpa sesi.
 
 Autentikasi belum dapat digunakan sampai aplikasi Firebase Web dikonfigurasi. Buat aplikasi Web di Firebase, salin `.env.example` sebagai `.env.local` (PowerShell: `Copy-Item .env.example .env.local`), lalu ganti nilai contoh dengan konfigurasi Web Firebase dari **Project settings → Your apps**. Isi sekurangnya `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_PROJECT_ID`, dan `VITE_FIREBASE_APP_ID`. Mulai ulang server Vite setelah mengubah environment. Untuk deployment, tambahkan variabel yang sama pada pengaturan environment hosting dan build ulang. Nilai konfigurasi Web Firebase berada di sisi klien; jangan menaruh kredensial Admin SDK atau service account di frontend.
 

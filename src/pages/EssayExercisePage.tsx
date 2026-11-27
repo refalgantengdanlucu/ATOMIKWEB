@@ -32,8 +32,9 @@ export function EssayExercisePage() {
 
   // Muat jawaban yang tersimpan saat pertama kali dibuka
   useEffect(() => {
-    if (!profile?.uid) return;
-    void loadStudentEssayAnswers(profile.uid).then((data) => {
+    let active = true;
+    void loadStudentEssayAnswers(uid).then((data) => {
+      if (!active) return;
       setSavedSubmissions(data);
       const textMap: Record<string, string> = {};
       Object.entries(data).forEach(([qId, sub]) => {
@@ -41,7 +42,10 @@ export function EssayExercisePage() {
       });
       setAnswers((prev) => ({ ...textMap, ...prev }));
     });
-  }, [profile?.uid]);
+    return () => {
+      active = false;
+    };
+  }, [uid]);
 
   // Sinkronkan tab saat index soal berpindah
   useEffect(() => {
@@ -94,7 +98,9 @@ export function EssayExercisePage() {
       setSavedSubmissions((prev) => ({ ...prev, [question.id]: saved }));
       setNotification({
         id: question.id,
-        msg: 'Jawaban berhasil disimpan ke akun Anda!',
+        msg: profile?.uid
+          ? 'Jawaban berhasil disimpan ke akun Anda!'
+          : 'Jawaban berhasil disimpan pada perangkat ini.',
         type: 'success',
       });
     } catch (err: unknown) {
